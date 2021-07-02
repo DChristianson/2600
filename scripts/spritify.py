@@ -97,7 +97,7 @@ def shift_word(word, offset):
 
 def solve_for_hmove(tuples):
     # find offsets
-    vars = [[], [], []]
+    vars = [[], [], [], []]
     for i in range(0, len(tuples) - 1):
         if tuples[i + 1][2] == 0:
             delta_offset = 0
@@ -109,9 +109,11 @@ def solve_for_hmove(tuples):
     vars[0].append(tuples[-1][0])
     vars[1].append(0)
     vars[2].append(tuples[-1][2])
+
     print(vars[1])
     # convert to hmove
     vars[1] = list([hmove(var) for var in vars[1]])
+    vars[3] = list([a + b for a, b in zip(vars[0], vars[1])])
     return vars
 
 
@@ -163,8 +165,9 @@ if __name__ == "__main__":
         for i, filename in enumerate(files):
             varname = f'{spritename}.{i}'
             with Image.open(filename, 'r') as image:
+                print(';image')
                 emit_sprite8(varname, image, out)
+                print(';reverse')
                 emit_sprite8(varname, image, out, reverse=True)
-
 
         

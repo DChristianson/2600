@@ -2,7 +2,11 @@
     include "vcs.h"
     include "macro.h"
 
+; ----------------------------------
+; constants
+
 SKY_BLUE = 160
+SKY_YELLOW = 250
 DARK_WATER = 160
 SUN_RED = 48
 CLOUD_ORANGE = 34
@@ -14,7 +18,23 @@ YELLOW = 30
 WHITE = 14
 BLACK = 0
 
+; ----------------------------------
+; variables
+
+  SEG.U variables
+
+    ORG $80
+
+rider_ctrl     ds 2
+rider_rtrl     ds 2
+rider_graphics ds 2
+
     SEG
+
+; ----------------------------------
+; code
+
+  SEG
     ORG $F000
 
 Reset
@@ -34,13 +54,24 @@ Reset
             lda #$01
             sta CTRLPF
 
+  ; rider positions
+            lda #$ff
+            sta rider_ctrl+1
+            sta rider_rtrl+1
+            sta rider_graphics+1
+            lda #<RIDER_SPRITE_0_CTRL
+            sta rider_ctrl
+            lda #<RIDER_SPRITE_0_RTRL
+            sta rider_rtrl
+            lda #<RIDER_SPRITE_0_GRP
+            sta rider_graphics
+
 newFrame
 
   ; Start of vertical blank processing
             
             lda #0
             sta VBLANK
-
             sta COLUBK              ; background colour to black
 
     ; 3 scanlines of vertical sync signal to follow
@@ -62,7 +93,6 @@ vBlank      sta WSYNC
             bne vBlank
 
     ; 192 scanlines of picture to follow
-
 
 ; ----------------------------------
 ; horizon kernel
@@ -127,17 +157,23 @@ horizonEnd
             lda #GREEN
             sta COLUBK
 
-            lda #8
+            ldx #8
 rail_A  
             sta WSYNC
             dex
             bne rail_A
+;
+           jsr rider_A ;37
+        ;     jsr rider_A ;37
+        ;     jsr rider_A ;37
+        ;     jsr rider_A ;37  
+        ;     jsr rider_A ;37     
 
-            jsr rider_A
-            jsr rider_A
-            jsr rider_A
-            jsr rider_A      
-            jsr rider_A      
+            ldx #8
+rail_B  
+            sta WSYNC
+            dex
+            bne rail_B
 
     ; SC 180
             lda #BLACK
@@ -166,30 +202,38 @@ doOverscan  sta WSYNC               ; wait a scanline
 ; Rider A Pattern
 
 rider_A    
-            sta WSYNC       ;3  0 
-            SLEEP 50        ;25 25
-            sta RESP1       ;3  56      
-            ldy #23         ;2  63
+            ; locate p1
+            sta WSYNC       ;3   0 
+            SLEEP 40        ;40 40
+            sta RESP1       ;3  43
+            lda #0          ;2  45
+            sta HMP1        ;3  48   
+            lda #0          ;2  50
+            sta REFP1       ;3  53
+            ldy #23         ;2  55
+
 rider_A_loop  
-            sta WSYNC         ;3  0
-            sta HMOVE         ;3  3 ; process hmoves
-            lda (graphics0),y ;6 25 ; p1 draw
-            sta GRP1          ;3 28
-            lda (scale0),y    ;6 34
-            sta NUSIZ1        ;3 37
-            lda (tessfo0),y   ;5 42
-            sta HMP1          ;3 45
+            sta WSYNC              ;3  0
+            sta HMOVE              ;3  3 ; process hmoves
+            lda (rider_graphics),y ;6  9 ; p1 draw
+            sta GRP1               ;3 12
+            lda (rider_ctrl),y     ;6 18
+            sta NUSIZ1             ;3 21
+            nop
+            sta HMP1               ;3 24
             dey 
-            bne rider_A_loop  ;2 70/71
+            bne rider_A_loop       ;2 26
 
-            lda #0              ;2 17
-            sta GRP1
-
+            sta WSYNC              ;3  0
+            lda #0                 ;2  2
+            sta GRP1               ;3  5
+            rts                    ;6 11
 
 ;-----------------------------------------------------------------------------------
-; the graphics
+; sprite graphics
 
     ORG $FF00
+
 HORIZON_COLOR ; 14 bytes
         byte CLOUD_ORANGE - 2, CLOUD_ORANGE, CLOUD_ORANGE + 2, CLOUD_ORANGE + 4, 250, 252, 254, 252, 250, WHITE_WATER, SKY_BLUE + 8, SKY_BLUE + 4, SKY_BLUE + 2, SKY_BLUE 
 HORIZON_COUNT ; 14 bytes
@@ -198,14 +242,12 @@ SUN_SPRITE_LEFT ; 36
         byte $ff,$ff,$ff,$ff,$7f,$7f,$7f,$7f,$3f,$3f,$3f,$1f,$1f,$f,$f,$7,$3,$1,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
 SUN_SPRITE_MIDDLE ; 36
         byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$3c,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-RIDER_0_NUSIZ
-        byte	$0,$0,$0,$5,$5,$5,$5,$5,$5,$7,$7,$5,$5,$7,$5,$5,$5,$0,$0,$0,$0,$0,$0,$0; 24
-RIDER_0_HMOV
-        byte	$0,$0,$f0,$f0,$f0,$0,$0,$0,$0,$c0,$10,$40,$0,$10,$20,$20,$f0,$e0,$50,$10,$0,$10,$f0,$0; 24
-RIDER_0_IMOV
-        byte	$0,$cc,$c1,$8c,$ee,$c6,$ee,$fe,$fe,$f8,$f8,$ff,$ff,$f8,$ef,$ec,$e4,$cf,$f0,$e0,$f0,$c0,$90,$90; 24
-RIDER_0_GRAPHICS
-        byte	$0,$e0,$f0,$f0,$0,$0,$0,$f0,$0,$f0,$f0,$f0,$0,$d0,$0,$0,$10,$20,$50,$0,$f0,$10,$f0,$0; 24
+RIDER_SPRITE_0_CTRL
+        byte	$0,$f0,$f0,$f5,$f5,$5,$5,$f5,$5,$d7,$35,$d7,$45,$b7,$85,$25,$f5,$e5,$50,$10,$0,$10,$f0,$0; 24
+RIDER_SPRITE_0_RTRL
+        byte	$0,$e0,$f0,$f5,$5,$5,$5,$f5,$5,$f7,$f5,$f7,$5,$d7,$5,$5,$15,$25,$50,$0,$f0,$10,$f0,$0; 24
+RIDER_SPRITE_0_GRP
+        byte	$90,$ce,$c1,$8c,$ec,$c4,$cc,$fe,$fe,$f8,$ff,$f8,$ff,$fc,$ef,$ee,$e6,$b2,$f0,$e0,$f0,$c0,$90,$90; 24
 
 ;-----------------------------------------------------------------------------------
 ; the CPU reset vectors
