@@ -117,13 +117,13 @@ def solve_for_hmove(tuples):
 
 
 # variable resolution sprite
-def emit_sprite8(varname, image, fp, width=24, reversed=False):
+def emit_sprite8(varname, image, fp, width=24, reverse=False):
     if not image.mode == 'RGBA':
         image = image.convert(mode='RGBA')
     data = image.getdata()
     rows = chunker(map(bit, data), width)
-    if reversed:
-        rows = [reversed(row) for row in rows]
+    if reverse:
+        rows = [tuple(reversed(row)) for row in rows]
     tuples = list([compress8(row) for row in rows])
     vars = solve_for_hmove(tuples)
     # write output
@@ -164,7 +164,7 @@ if __name__ == "__main__":
             varname = f'{spritename}.{i}'
             with Image.open(filename, 'r') as image:
                 emit_sprite8(varname, image, out)
-                emit_sprite8(varname, image, out, reversed=True)
+                emit_sprite8(varname, image, out, reverse=True)
 
 
         
