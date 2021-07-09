@@ -12,6 +12,7 @@ import itertools
 from collections import namedtuple
 import queue
 from dataclasses import dataclass, field
+import argparse
 
 aseprite_path = '/Users/dchristianson/Library/Application Support/Steam/steamapps/common/Aseprite/Aseprite.app/Contents/MacOS'
 explicit_zero = False
@@ -109,31 +110,49 @@ class SolutionItem:
     steps: object = field(compare=False)
     frontier: object = field(compare=False)
 
-def find_offset_solution(compressedbits):
+def find_offset_solution(compressedbits, solve_left=True, solve_right=False):
     solutions = queue.PriorityQueue()
     base_priority = 10 * (len(compressedbits) - 1)
-    for a in paddings(compressedbits[0]):
-        solutions.put(SolutionItem(base_priority, [(None, 0, 0, a)], compressedbits[1:]))
+    max_depth = len(compressedbits)
+
+    leading_steps = []
+    while len(compressedbits) > 0:
+        first_nonzero_row = compressedbits[0]
+        compressedbits = compressedbits[1:]
+        if len(first_nonzero_row.bits) > 0:
+            break
+        leading_steps.append((0, 0, (0, 0, [0] * 8)))
+
+    for a in paddings(first_nonzero_row):
+        solutions.put(SolutionItem(base_priority, leading_steps + [(0, 0, a)], compressedbits))
 
     while not solutions.empty():
         item = solutions.get()
-        _, _, _, a = item.steps[-1]
+        _, _, a = item.steps[-1]
         b = item.frontier[0]
-        for candidate in paddings(b):
+        max_depth = min(max_depth, len(item.frontier))
+        if len(b.bits) == 0:
+            candidates = [(a[0], a[1], [0] * 8)]
+        else:
+            candidates = paddings(b)
+        for candidate in candidates:
             lmove = candidate[0] - a[0]
             rmove = candidate[1] - a[1]
-            if not is_legal_hmove(lmove):# or not is_legal_hmove(rmove):
+            if solve_left and not is_legal_hmove(lmove):
                 continue
-            next_step = (a, lmove, rmove, candidate)
+            if solve_right and not is_legal_hmove(rmove):
+                continue
+            next_step = (lmove, rmove, candidate)
+            next_solution = item.steps + [next_step]
             if len(item.frontier) == 1:
-                return item.steps[1:] + [next_step]
+                return next_solution
             else:
                 cost = item.priority + abs(lmove) + abs(rmove) - 10
-                next_solution = item.steps + [next_step]
                 solutions.put(SolutionItem(cost, next_solution, item.frontier[1:]))
+    raise Exception(f'cannot find solution at depth {max_depth}')
             
 # variable resolution sprite
-def emit_sprite8(varname, image, fp, width=24, reverse=False):
+def emit_sprite8(varname, image, fp, width=24, reverse=False, lr_solve=False):
     if not image.mode == 'RGBA':
         image = image.convert(mode='RGBA')
     data = image.getdata()
@@ -142,24 +161,23 @@ def emit_sprite8(varname, image, fp, width=24, reverse=False):
         rows = [tuple(reversed(row)) for row in rows]
 
     compressedbits = list([compress8(list(row)) for row in rows])
-    solution = find_offset_solution(compressedbits)
+    solution = find_offset_solution(compressedbits, solve_left=True, solve_right=lr_solve)
 
-    left_delta = list([step[1] for step in solution])
-    right_delta = list([step[2] for step in solution])
-    padded_bits = list([step[3][2] for step in solution])
+    left_delta = list([step[0] for step in solution[1:]] + [0])
+    right_delta = list([step[1] for step in solution[1:]] + [0])
+    padded_bits = list([step[2][2] for step in solution])
 
-    print(left_delta)
-    print(right_delta)
-    print(padded_bits)
-    
     nusizes = list([ nusize(cb.scale) for cb in compressedbits])
     ctrl = list([hmove(offset) + size for offset, size in zip(left_delta, nusizes)])
-    rtrl = list([hmove(-offset) + size for offset, size in zip(right_delta, nusizes)])
+    ctrr = list([hmove(-offset) + size for offset, size in zip(right_delta, nusizes)]) if lr_solve else None
     graphics = list([bits2int(bits) for bits in padded_bits])
 
     # write output
-    for col in [ctrl, rtrl, graphics]:
+    for name, col in [('ctrl', ctrl), ('ctrr', ctrr), ('graphics', graphics)]:
+        if col is None:
+            continue
         value = ','.join([int2asm(word) for word in reversed(col)])
+        fp.write(f'{varname}_{name}\n'.upper())
         fp.write(f'    byte {value}; {len(col)}\n')
 
 # full sized sprite
@@ -170,34 +188,41 @@ def emit_sprite24(varname, image, fp):
     vars = [[], [], []]
     for i, word in enumerate([bits2int(chunk) for chunk in chunker(map(bit, data), 8)]):
         vars[i % 3].append(word)
+    fp.write(f'{varname}\n'.upper())
     for col in vars:
         value = ','.join([int2asm(word) for word in reversed(col)])
         fp.write(f'\t\t\t\tbyte\t{value}; {len(col)}\n')
 
-
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(description='Generate 6502 assembly for sprite graphics')
+    parser.add_argument('--reverse', type=bool, default=False)
+    parser.add_argument('--bits', type=int, choices=[8, 24], default=8)
+    parser.add_argument('filenames', nargs='*')
+
+    args = parser.parse_args()
+
     sprites = {}
-    for filename in sys.argv[1:]:
+    
+    for filename in args.filenames:
         spritename, ext = os.path.splitext(path.basename(filename))
         aseprite_save_as(filename, f'data/{spritename}_001.png')
         sprites[spritename] = list(glob.glob(f'data/{spritename}_*.png'))
 
     out = sys.stdout
     for spritename, files in sprites.items():
-        # 24 bit
-        for i, filename in enumerate(files):
-            varname = f'{spritename}.{i}'
-            with Image.open(filename, 'r') as image:
-                emit_sprite24(varname, image, out)
-        # 8 bit
-        for i, filename in enumerate(files):
-            varname = f'{spritename}.{i}'
-            with Image.open(filename, 'r') as image:
-                print(';image')
-                emit_sprite8(varname, image, out)
-                # 
-                # print(';reverse')
-                # emit_sprite8(varname, image, out, reverse=True)
+        if args.bits == 24:
+            for i, filename in enumerate(files):
+                varname = f'{spritename}_{i}'
+                with Image.open(filename, 'r') as image:
+                    emit_sprite24(varname, image, out)
+        else:
+            # 8 bit
+            for i, filename in enumerate(files):
+                varname = f'{spritename}_{i}'
+                with Image.open(filename, 'r') as image:
+                    emit_sprite8(varname, image, out, lr_solve=(not args.reverse))
+                    if args.reverse:
+                        emit_sprite8(varname + '_r', image, out, reverse=True)
 
         
