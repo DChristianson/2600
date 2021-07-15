@@ -221,7 +221,7 @@ horizonEnd
             sta REFP0                ;
             sta NUSIZ0               ;
             sta NUSIZ1               ;
-
+            sta HMCLR
 ; ----------------------------------
 ; playfield kernel 
 
@@ -300,13 +300,14 @@ rider_A
             bpl skip_p0             ;2  10 
             lda (player_graphics),y ;5  15 ; p0 draw
             sta GRP0                ;3  18
-            lda (player_ctrl),y     ;6  22
-            sta NUSIZ0              ;3  25
-            sta HMP0                ;3  28
-            jmp loc_p1              ;3  31
+            lda (player_ctrl),y     ;5  23
+            sta NUSIZ0              ;3  26
+            sta HMP0                ;3  29
+            jmp loc_p1              ;3  32
 skip_p0    ;11
-           SLEEP 20
-loc_p1
+           SLEEP 20                 ;20 31           
+loc_p1     ;32
+            sta RESP1               ;3  46
             lda rider_hdelay,x      ;4  35
             sta delay               ;3  38
             ;jmp (delay)            ;5  43
@@ -314,7 +315,6 @@ loc_p1
         ;     byte      $c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9
         ;     byte      $c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9
         ;     byte      $c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c5
-            sta RESP1               ;3  46
             lda rider_hmov,x        ;2  47
             sta HMP1                ;3  50
             lda rider_color,x       ;4  54

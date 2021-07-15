@@ -297,18 +297,19 @@ rider_A_start; locating rider horizontally
             ; locate p1
             sta WSYNC               ;3   0 
             sta HMOVE               ;3   3 ; process hmoves
-            lda rider_hdelay,x      ;5   8
-            sta delay               ;3  11
-            ;jmp (delay)             ;5  43
-            byte      $c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9
-            byte      $c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c5  
-            sta RESP1               ;3  34
-            lda rider_hmov,x        ;2  36
-            sta HMP1                ;3  39
-            lda rider_color,x       ;4  43
-            sta COLUP1              ;3  46
-            lda #RIDER_HEIGHT - 1   ;2  48
-            sta rider_index         ;3  51
+            lda rider_color,x       ;4   7
+            sta COLUP1              ;3  10
+            lda #RIDER_HEIGHT - 1   ;2  12
+            sta rider_index         ;3  15
+            ldy rider_hdelay,x      ;5  20
+            lda rider_hmov,x        ;2  22
+            sta HMP1                ;3  25
+            iny                     ;2  27
+
+rider_A.hdelay
+            dey                     ;3  30
+            bne rider_A.hdelay      ;2  32 + hdelay * 6
+            sta RESP1               ;3  16
             dec player_vdelay       ;5  56
             beq rider_B_loop        ;2  58
 
@@ -355,20 +356,19 @@ rider_B_start
             sta NUSIZ0              ;3  22
             sta HMP0                ;3  25
 
-            lda rider_hdelay,x      ;4  29
-            sta delay               ;3  32
-            ;jmp (delay)             ;5  43
-            byte      $c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9
-            byte      $c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c9,$c5
-            sta RESP1                ;3  35
-            lda rider_hmov,x        ;2  37
-            sta HMP1                ;3  40
-            lda rider_color,x       ;4  44
-            sta COLUP1              ;3  47
-            lda #RIDER_HEIGHT - 1   ;2  49
-            sta rider_index         ;3  52
-            dec player_index        ;5  57
-            bmi rider_A_loop        ;2  59
+            ldy rider_hdelay,x      ;5  30
+rider_B.hdelay
+            dey                     ;3  33
+            bne rider_B.hdelay      ;2  35 + hdelay * 6
+            sta RESP1               ;3  38
+            lda rider_hmov,x        ;2  40
+            sta HMP1                ;3  43
+            lda rider_color,x       ;4  47
+            sta COLUP1              ;3  50
+            lda #RIDER_HEIGHT - 1   ;2  52
+            sta rider_index         ;3  55
+            dec player_index        ;5  60
+            bmi rider_A_loop        ;2  62
 
 rider_B_loop  
             sta WSYNC               ;3   0
