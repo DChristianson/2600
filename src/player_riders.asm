@@ -114,12 +114,13 @@ Reset
             stx rider_hdelay + 3
             dex
             stx rider_hdelay + 4
-            ldx #$90
+            ldx #$80
             stx rider_hmov_0
             stx rider_hmov_0 + 1
             stx rider_hmov_0 + 2
             stx rider_hmov_0 + 3
             stx rider_hmov_0 + 4
+            ldx #$0
             stx rider_hmov_1
             stx rider_hmov_1 + 1
             stx rider_hmov_1 + 2
@@ -207,33 +208,31 @@ moveRider.loop
             sty rider_timer,x   ;4  14
             lda #$10            ;2  16
             clc                 ;2  18
-            adc rider_hmov_0,x    ;4  22
-            bvs moveRider.hmov2 ;2  24
-            sta rider_hmov_0,x    ;4  28  
+            adc rider_hmov_0,x  ;4  22
+            bvs moveRider.resp  ;2  24
+            sta rider_hmov_0,x  ;4  28  
             jmp moveRider.end   ;3  31
-moveRider.hmov2 ; push the second move register forward
-            lda #$90                      ;2  27       
-            cmp rider_hmov_1,x ;4  31 
-            bne moveRider.resp            ;2  33
-            sta rider_hmov_0,x              ;4  37
-            lda #$70                      ;2  39
-            sta rider_hmov_1,x ;4  43
-            jmp moveRider.end             ;3  46
-moveRider.resp            
-            sta rider_hmov_1,x ;4  39
-            dec rider_hdelay,x            ;7  46
-            bpl moveRider.end             ;2  48
-            lda #RIDER_RESP_START         ;2  50
-            sta rider_hdelay,x            ;4  54
+moveRider.resp
+            lda #$90              ;2  27
+            sta rider_hmov_0,x    ;4  31  
+            dec rider_hdelay,x    ;6  37
+            bpl moveRider.end     ;2  39
+            lda #RIDER_RESP_START ;2  41
+            sta rider_hdelay,x    ;4  45
 moveRider.end
-            dex                           ;2  56
-            bpl moveRider.loop            ;2  58
+            dex                   ;2  47
+            bpl moveRider.loop    ;2  49
 ;A Y0 SC 29 PP  33
 ;A Y1 SC?34 PP? 48
 ;A Y2 SC 39 PP  63
 ;A Y3 SC 44 PP  78
 ;A Y4 SC 49 PP  93
 ;A Y5 SC 54 PP 108
+
+
+;A Y9 SC 62 PP 132
+;33 + 7 + 7 
+;48 - 7 - 7
     ; 192 scanlines of picture to follow
 
 ; ----------------------------------
@@ -381,10 +380,10 @@ rider_A.hmov; locating rider horizontally 2
             sta COLUP1                    ;3  10
             lda #RIDER_HEIGHT - 1         ;2  12
             sta rider_index               ;3  15
-            lda rider_hmov_1,x ;4  19
-            sta HMP1                      ;3  28
-            dec player_vdelay             ;5  33
-            beq rider_B.loop              ;2  35
+            lda rider_hmov_1,x            ;4  19
+            dec player_vdelay             ;5  24
+            sta HMP1                      ;3  27
+            beq rider_B.loop              ;2  29
 
 rider_A.loop;
             sta WSYNC               ;3   0
