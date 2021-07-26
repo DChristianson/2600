@@ -30,6 +30,7 @@ RIDER_RESP_START = 9
 
     ORG $80
 
+rider_animate   ds 1
 rider_ctrl      ds 2
 rider_graphics  ds 2
 rider_color     ds 5
@@ -37,6 +38,8 @@ rider_hdelay    ds 5
 rider_hmov_0    ds 5
 rider_hmov_1    ds 5
 rider_index     ds 1
+rider_timer     ds 5
+player_animate  ds 1
 player_ctrl     ds 2
 player_graphics ds 2
 player_color    ds 1
@@ -44,8 +47,8 @@ player_index    ds 1
 player_vdelay   ds 1
 player_vpos     ds 1
 player_hmov     ds 1
-player_timer    ds 1
-rider_timer     ds 5
+player_charge   ds 1
+
 
 
     SEG
@@ -121,14 +124,16 @@ Reset
             stx rider_hmov_0 + 3
             stx rider_hmov_0 + 4
             ldx #$0
+            stx player_hmov
             stx rider_hmov_1
             stx rider_hmov_1 + 1
             stx rider_hmov_1 + 2
             stx rider_hmov_1 + 3
             stx rider_hmov_1 + 4
             ldx #PLAYER_SPEED
-            stx player_timer
+            stx player_animate
             ldx #RIDER_SPEED
+            stx rider_animate
             stx rider_timer
             stx rider_timer + 1
             stx rider_timer + 2
@@ -136,7 +141,7 @@ Reset
             stx rider_timer + 4
             lda #$01
             sta player_vpos
-        
+            sta player_charge
 
 newFrame
 
@@ -159,99 +164,140 @@ newFrame
             sta VSYNC               ; turn OFF VSYNC bit 1
 
     ; 37 scanlines of vertical blank to follow
-            ldx #37 - NUM_RIDERS - 3
+            ldx #37 - NUM_RIDERS - 5
 vBlank      sta WSYNC
             dex
             bne vBlank
-; SL -8
-updatePlayer
+
+; SL -10
+animatePlayer
             sta WSYNC
-            ldx player_timer
-            dex
-            bpl updatePlayer_end
+            dec player_animate
+            bpl animatePlayer_end
             lda player_ctrl
             cmp #<PLAYER_SPRITE_2_CTRL
-            bne updatePlayer_skipCtrl0
+            bne animatePlayer_skipCtrl0
             lda #<PLAYER_SPRITE_0_CTRL
-            jmp updatePlayer_savCtrl0
-updatePlayer_skipCtrl0
+            jmp animatePlayer_savCtrl0
+animatePlayer_skipCtrl0
             clc
             adc #48
-updatePlayer_savCtrl0
+animatePlayer_savCtrl0
             sta player_ctrl
             lda player_graphics
             cmp #<PLAYER_SPRITE_2_GRAPHICS
-            bne updatePlayer_skipGraphics0
+            bne animatePlayer_skipGraphics0
             lda #<PLAYER_SPRITE_0_GRAPHICS
-            jmp updatePlayer_savGraphics0
-updatePlayer_skipGraphics0
+            jmp animatePlayer_savGraphics0
+animatePlayer_skipGraphics0
             clc
             adc #48
-updatePlayer_savGraphics0
+animatePlayer_savGraphics0
             sta player_graphics
             ldx #PLAYER_SPEED
+            stx player_animate
+animatePlayer_end
 
-updatePlayer_end
-            stx player_timer
-
+; SL -9
 movePlayer
-            lda #$80
-            bit SWCHA
-            beq movePlayer_right
-            lsr
-            bit SWCHA
-            beq movePlayer_left
-            lsr
-            bit SWCHA
-            beq movePlayer_down
-            lsr
-            bit SWCHA
-            beq movePlayer_up
+            sta WSYNC            ;3   0
+            lda #$80             ;3   3
+            bit SWCHA            ;3   6
+            beq movePlayer_right ;2   8
+            lsr                  ;2  10
+            bit SWCHA            ;3  13
+            beq movePlayer_left  ;2  15
+            lsr                  ;2  17
+            bit SWCHA            ;3  20
+            beq movePlayer_down  ;2  22
+            lsr                  ;3  25
+            bit SWCHA            ;3  28
+            beq movePlayer_up    ;2  30
+            jmp movePlayer_end   ;3  33
 
 movePlayer_right
-            inc player_hmov
-            jmp movePlayer_end
+            lda #$F0             ;2  11
+            jmp movePlayer_horiz ;3  14
 movePlayer_left
-            dec player_hmov
-            jmp movePlayer_end
+            lda #$10             ;2  18
+movePlayer_horiz
+            clc                  ;2  20
+            adc player_hmov      ;3  23
+            bvs movePlayer_end   ;2  25
+            sta player_hmov      ;3  28
+            jmp movePlayer_end   ;3  31
 movePlayer_down
-            inc player_vpos
-            jmp movePlayer_end
+            inc player_vpos      ;5  28
+            lda #110
+            cmp player_vpos
+            bmi movePlayer_up
+            jmp movePlayer_end   ;3  31
 movePlayer_up
-            dec player_vpos
+            dec player_vpos      ;5  36
+            beq movePlayer_down  ;3
+            
 movePlayer_end
 
+; SL -8
+animateRider
+            sta WSYNC
+            dec rider_animate
+            bpl animateRider_end
+            lda player_ctrl
+            cmp #<PLAYER_SPRITE_2_CTRL
+            bne animateRider_skipCtrl0
+            lda #<PLAYER_SPRITE_0_CTRL
+            jmp animateRider_savCtrl0
+animateRider_skipCtrl0
+            clc
+            adc #48
+animateRider_savCtrl0
+            sta rider_ctrl
+            lda rider_graphics
+            cmp #<PLAYER_SPRITE_2_GRAPHICS
+            bne animateRider_skipGraphics0
+            lda #<PLAYER_SPRITE_0_GRAPHICS
+            jmp animateRider_savGraphics0
+animateRider_skipGraphics0
+            clc
+            adc #48
+animateRider_savGraphics0
+            sta rider_graphics
+            ldx #RIDER_SPEED
+            stx rider_animate
+animateRider_end
 
             ldx #NUM_RIDERS - 1
 ; SL -7 : -3
-moveRider.loop
+moveRider_loop
             sta WSYNC
             dec rider_timer,x   ;6   6
-            bpl moveRider.end   ;2   8
+            bpl moveRider_end   ;2   8
             ldy #RIDER_SPEED    ;2  10
             sty rider_timer,x   ;4  14
             lda #$10            ;2  16
             clc                 ;2  18
             adc rider_hmov_0,x  ;4  22
-            bvs moveRider.resp  ;2  24
+            bvs moveRider_resp  ;2  24
             sta rider_hmov_0,x  ;4  28  
-            jmp moveRider.end   ;3  31
-moveRider.resp
+            jmp moveRider_end   ;3  31
+moveRider_resp
             lda #$90              ;2  27
             sta rider_hmov_0,x    ;4  31  
             dec rider_hdelay,x    ;6  37
-            bpl moveRider.end     ;2  39
+            bpl moveRider_end     ;2  39
             lda #RIDER_RESP_START ;2  41
             sta rider_hdelay,x    ;4  45
-moveRider.end
+moveRider_end
             dex                   ;2  47
-            bpl moveRider.loop    ;2  49
-;A Y0 SC 29 PP  33
-;A Y1 SC?34 PP? 48
-;A Y2 SC 39 PP  63
-;A Y3 SC 44 PP  78
-;A Y4 SC 49 PP  93
-;A Y5 SC 54 PP 108
+            bpl moveRider_loop    ;2  49
+;A Y0 SC 17 PP  -3
+;A Y1 SC 22 PP? 12
+;A Y2 SC 27 PP  27
+;A Y3 SC 32 PP  42
+;A Y4 SC 37 PP  57
+;A Y5 SC 42 PP  72
+;A Y6 SC 47 PP  87
 
 
 ;A Y9 SC 62 PP 132
@@ -320,44 +366,57 @@ horizonEnd
 
     ; SC 36           
 
-            sta WSYNC
-            lda #GREEN
-            sta COLUBK
-            SLEEP 21
-            sta RESP0
-            lda player_color
-            sta COLUP0
-            lda player_vpos
-            sta player_vdelay
-            lda #RIDER_HEIGHT - 1
-            sta player_index
+            sta WSYNC                ;3   0
+            lda #GREEN               ;2   2
+            sta COLUBK               ;3   5
+            ldy #4                   ;2   7
+player_resp_loop
+            dey                      ;2   9
+            bpl player_resp_loop     ;2  11 + 20 = 31
+            sta RESP0                ;3  34
+            lda player_color         ;3  37
+            sta COLUP0               ;3  40
+            lda player_vpos          ;3  43 
+            sta player_vdelay        ;3  46
+            lda #RIDER_HEIGHT - 1    ;2  48
+            sta player_index         ;3  51
+            lda player_hmov          ;3  54
+            sta HMP0                 ;3  57
 
-            ldx #8
-rail_A.loop 
-            sta WSYNC
-            dex
-            bne rail_A.loop
+    ; SC 35
+            sta WSYNC                ;3   0
+            sta HMOVE                ;3   3
+            lda #1                   ;2   5
+            sta RESMP0               ;3   8
+
+            ldx #8                   ;2  10
+rail_A_loop 
+            sta WSYNC                ;3   0
+            dex                      ;2   2
+            bne rail_A_loop          ;2   4
 
 riders_start
-            ldx #4
-            jmp rider_A.start
+            stx HMP0                 ;3   7
+            stx RESMP0               ;3  10
+            ldx #4                   ;2  12
+            jmp rider_A_start        ;3  15
 
 riders_end
 
             ldx #8
-rail_B.loop  
+rail_B_loop  
             sta WSYNC
             dex
-            bne rail_B.loop
+            bne rail_B_loop
 
     ; SC 180
             lda #BLACK
             sta COLUBK
             ldx #12
-logo.loop 
+logo_loop 
             sta WSYNC
             dex
-            bne logo.loop
+            bne logo_loop
 
             lda #0
             sta COLUBK              ; background colour to black
@@ -372,32 +431,55 @@ doOverscan  sta WSYNC               ; wait a scanline
             bne doOverscan
             lda #$01
             bit SWCHB
-            bne doOverscan.end
+            bne doOverscan_end
             jmp Reset
 
-doOverscan.end
+doOverscan_end
             jmp newFrame
 
 ;-----------------------------------------------------------------------------------
 ; Rider A Pattern
 ; rider only, waiting for player
 
-rider_A.start
+rider_A_to_B_hmov
+            lda #$ff
+            sta ENAM0
+            sta HMM0
+            jmp rider_B_hmov
+
+rider_A_to_B_loop
+            lda #$ff
+            sta ENAM0
+            sta HMM0
+            jmp rider_B_loop
+
+rider_A_to_B_loop_a
+            lda #$ff
+            sta ENAM0
+            sta HMM0
+            jmp rider_B_loop_a
+
+rider_A_to_B_end_a
+            lda #$ff
+            sta ENAM0
+            sta HMM0
+            jmp rider_B_end_a
+
+rider_A_start
             ; locate p1
             sta WSYNC               ;3   0 
-            lda rider_hmov_0,x        ;4   4
+            lda rider_hmov_0,x      ;4   4
             sta HMP1                ;3   7
             ldy rider_hdelay,x      ;4  11
-            iny                     ;2  13
 
-rider_A.resp; strobe resp 
-            dey                     ;2  15
-            bne rider_A.resp        ;2+ 17 
-            sta RESP1               ;3  20 (17 + hdelay * 5)
-            dec player_vdelay       ;5  25
-            beq rider_B.hmov        ;2  27
+rider_A_resp; strobe resp 
+            dey                     ;2  13
+            bpl rider_A_resp        ;2+ 15
+            sta RESP1               ;3  18 (15 + hdelay * 5)
+            dec player_vdelay       ;5  23
+            beq rider_A_to_B_hmov   ;2  25
 
-rider_A.hmov; locating rider horizontally 2
+rider_A_hmov; locating rider horizontally 2
             sta WSYNC                     ;3   0 
             sta HMOVE                     ;3   3 ; process hmoves
             lda rider_color,x             ;4   7
@@ -407,9 +489,9 @@ rider_A.hmov; locating rider horizontally 2
             lda rider_hmov_1,x            ;4  19
             dec player_vdelay             ;5  24
             sta HMP1                      ;3  27
-            beq rider_B.loop              ;2  29
+            beq rider_A_to_B_loop         ;2  29
 
-rider_A.loop;
+rider_A_loop;
             sta WSYNC               ;3   0
             sta HMOVE               ;3   3 ; process hmoves
 
@@ -420,27 +502,28 @@ rider_A.loop;
             sta NUSIZ1              ;3  19
             sta HMP1                ;3  22
             dec player_vdelay       ;5  27
-            beq rider_B.loop.a      ;2  29
-rider_A.loop.a;
+            beq rider_A_to_B_loop_a ;2  29
+rider_A_loop_a;
             dec rider_index         ;5  34
-            bpl rider_A.loop        ;2  36
+            bpl rider_A_loop        ;2  36
 
-rider_A.end
+rider_A_end
             sta WSYNC               ;3  36
 
             dec player_vdelay       ;5  41
-            beq rider_B.end.a       ;2  43
+            beq rider_A_to_B_end_a  ;2  43
 
-rider_A.end.a
+rider_A_end_a
             dex                     ;2  45
-            bpl rider_A.start       ;2  47
+            bpl rider_A_start       ;2  47
             jmp riders_end          ;3  50
+
 
 ;-----------------------------------------------------------------------------------
 ; Rider B Pattern 
 ; player + rider on same line
 
-rider_B.start
+rider_B_start
             ; locate p1
             sta WSYNC               ;3   0 
             sta HMOVE               ;3   3 ; process hmoves
@@ -450,19 +533,19 @@ rider_B.start
             sta GRP0                ;3  14
             lda (player_ctrl),y     ;5  19
             sta NUSIZ0              ;3  22
-            sta HMP0                ;3  25
+            ldy rider_hdelay,x      ;4  26
 
-            ldy rider_hdelay,x      ;5  30
-rider_B.resp; strobe resp
-            dey                     ;3  33
-            bne rider_B.resp        ;2  35 + hdelay * 5
-            sta RESP1               ;3  38
-            lda rider_hmov_0,x      ;2  40
-            sta HMP1                ;3  43
+rider_B_resp; strobe resp
+            dey                     ;2  28
+            bpl rider_B_resp        ;2  30 + hdelay * 5
+            sta RESP1               ;3  33
+            sta HMP0                ;3  36
+            lda rider_hmov_0,x      ;2  38
+            sta HMP1                ;3  41
             dec player_index        ;5  60
-            bmi rider_A.hmov        ;2  62
+            bmi rider_A_hmov        ;2  62
 
-rider_B.hmov; locating rider horizontally
+rider_B_hmov; locating rider horizontally
             sta WSYNC               ;3   0 
             sta HMOVE               ;3   3 ; process hmoves
 
@@ -471,18 +554,18 @@ rider_B.hmov; locating rider horizontally
             sta GRP0                ;3  14
             lda (player_ctrl),y     ;5  19
             sta NUSIZ0              ;3  22
-            sta HMP0                ;3  25
 
-            lda rider_color,x       ;4  29
-            sta COLUP1              ;3  32
-            lda #RIDER_HEIGHT - 1   ;2  34
-            sta rider_index         ;3  37
-            lda rider_hmov_1,x      ;4  41
+            ldy rider_color,x       ;4  29
+            sty COLUP1              ;3  32
+            ldy #RIDER_HEIGHT - 1   ;2  34
+            sty rider_index         ;3  37
+            ldy rider_hmov_1,x      ;4  41
             dec player_vdelay       ;5  46
+            sta HMP0                ;3  25
             sta HMP1                ;3  49
-            beq rider_A.loop        ;2  51
+            beq rider_A_loop        ;2  51
 
-rider_B.loop  
+rider_B_loop  
             sta WSYNC               ;3   0
             sta HMOVE               ;3   3 ; process hmoves
 
@@ -500,13 +583,13 @@ rider_B.loop
             sta NUSIZ1              ;3  44
             sta HMP1                ;3  47
             dec player_index        ;5  52
-            bmi rider_A.loop.a      ;2  54
+            bmi rider_A_loop_a      ;2  54
 
-rider_B.loop.a
+rider_B_loop_a
             dec rider_index 
-            bpl rider_B.loop        ;2 26
+            bpl rider_B_loop        ;2 26
 
-rider_B.end
+rider_B_end
             sta WSYNC               ;3   0
             sta HMOVE               ;3   3 ; process hmoves
 
@@ -518,11 +601,11 @@ rider_B.end
             sta HMP0                ;3  28
 
             dec player_index
-            bmi rider_A.end.a       ;2  69
+            bmi rider_A_end_a       ;2  69
 
-rider_B.end.a
+rider_B_end_a
             dex                    ;6 11
-            bpl rider_B.start
+            bpl rider_B_start
             jmp riders_end
 
 ;-----------------------------------------------------------------------------------
