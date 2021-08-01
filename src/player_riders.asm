@@ -21,7 +21,7 @@ RIDER_HEIGHT = 24
 NUM_RIDERS = 5
 PLAYER_SPEED = 2
 RIDER_SPEED = 1
-RIDER_RESP_START = 6
+RIDER_RESP_START = 8
 
 ; ----------------------------------
 ; variables
@@ -292,19 +292,19 @@ moveRider_resp
 moveRider_end
             dex                   ;2  47
             bpl moveRider_loop    ;2  49
-;A Y0 SC 17 PP  -3
-;A Y1 SC 22 PP? 12
-;A Y2 SC 27 PP  27
-;A Y3 SC 32 PP  42
-;A Y4 SC 37 PP  57
-;A Y5 SC 42 PP  72
-;A Y6 SC 47 PP  87
 
+;A Y0 SC 22 PP  12
+;A Y1 SC 27 PP  27
+;A Y2 SC 32 PP  42
+;A Y3 SC 37 PP  57
+;A Y4 SC 42 PP  72
+;A Y5 SC 47 PP  87
+;A Y6 SC 52 PP 102
+;A Y7 SC 57 PP 117
+;A Y8 SC 62 PP 132
+;A Y9 SC 67 PP 147
 
-;A Y9 SC 62 PP 132
-;33 + 7 + 7 
-;48 - 7 - 7
-    ; 192 scanlines of picture to follow
+; 192 scanlines of picture to follow
 
 ; ----------------------------------
 ; horizon kernel
@@ -399,17 +399,10 @@ rail_A_loop
 riders_start
             stx HMP0                 ;3   7
             stx RESMP0               ;3  10
-            lda #$ff                 ;2  13
-            sta HMBL                 ;3  16
-            lda #$02                 ;2  18
-            sta ENABL                ;3  21
-            ldx #4                   ;2  23
-            jmp rider_A_start        ;3  26
+            ldx #4                   ;2  12
+            jmp rider_A_start        ;3  15
 
 riders_end
-            lda #$0
-            sta ENABL
-            sta HMBL
             ldx #8
 rail_B_loop  
             sta WSYNC
@@ -472,13 +465,43 @@ rider_A_to_B_end_a
             sta HMM0                ;3  18
             jmp rider_B_end_a       ;3  21
 
+rider_A_start_l
+            dec player_vdelay        ;5  21
+            beq rider_A_to_B_start_l ;2  23
+            sta HMP1                 ;3  26
+            dey                      ;2  28
+            dey                      ;2  30
+rider_A_resp_l; strobe resp
+            dey                      ;2  32
+            bne rider_A_resp_l       ;2+ 64 (34 + 6 * 5)
+            SLEEP 3                  ;3  67 timing shim
+            sta RESP1                ;3  70 
+            jmp rider_A_hmov            
+
+rider_A_to_B_start_l
+            sta HMP1                ;3  27
+            lda #$ff                ;2  29
+            sta ENAM0               ;3  32
+            sta HMM0                ;3  35
+            dey                     ;2  37
+            dey                     ;2  39
+            dey                     ;2  41
+            dey                     ;2  43
+rider_A_to_B_resp_l; strobe resp
+            dey                     ;2  45
+            bne rider_A_to_B_resp_l ;2+ 47 (47 + 3 * 5)
+            sta RESP1               ;3  25+ 
+            jmp rider_B_hmov
+
 rider_A_start
             ; locate p1
             sta WSYNC               ;3   0 
             sta HMOVE               ;3   3
             lda rider_hmov_0,x      ;4   7
             ldy rider_hdelay,x      ;4  11
-            SLEEP 7                 ;7  18
+            cpy #$06                ;2  13
+            bpl rider_A_start_l     ;2  15
+            jmp rider_A_resp        ;3  18 noop
 
 rider_A_resp; strobe resp 
             dey                     ;2  20
@@ -557,6 +580,35 @@ rider_B_start_1
             sta RESP1               ;3  31
             jmp rider_B_resp_end_1  ;3  28
 
+rider_B_start_l
+            ; locate p1
+            sta WSYNC               ;3   0 
+            sta HMOVE               ;3   3 ; process hmoves
+            ldy player_index        ;3   6
+            lda (player_graphics),y ;5  11 ; p0 draw
+            sta GRP0                ;3  14
+            lda (player_ctrl),y     ;5  19
+            sta NUSIZ0              ;3  22
+            sta HMP0                ;3  25
+            lda rider_hmov_0,x      ;4  29
+            sta HMP1                ;3  32
+            lda tmp                 ;3  35
+            clc                     ;2  37
+            sbc #$03                ;2  39
+            dec player_index        ;5  44
+            bmi rider_B_to_A_resp_l ;2  46
+rider_B_resp_l; strobe resp
+            sbc #$01                ;2  48
+            bpl rider_B_resp_l      ;2  55 (50 + (hdelay-6) * 5)
+            SLEEP 2                 ;2  57
+            sta RESP1               ;3  60
+            jmp rider_B_hmov        ;2  62
+rider_B_to_A_resp_l; strobe resp
+            sbc #$01                ;2  49
+            bpl rider_B_to_A_resp_l ;2  56 (51 + (hdelay-6) * 5)
+            sta RESP1               ;3  59
+            jmp rider_A_hmov        ;2  52
+
 rider_B_prestart
             ldy rider_hdelay,x     ;4  50
             dey                    ;2  52
@@ -564,7 +616,9 @@ rider_B_prestart
             dey                    ;2  56
             bmi rider_B_start_1    ;2  58
             sty tmp                ;3  61
-            jmp rider_B_start_n    ;3  64
+            cpy #$05               ;2  63
+            bpl rider_B_start_l    ;2  65
+            jmp rider_B_start_n    ;3  68
 
 rider_B_to_A_hmov
             lda #$0
@@ -577,7 +631,6 @@ rider_B_to_A_loop
             sta ENAM0
             sta HMM0
             jmp rider_A_loop
-
 
 rider_B_to_A_loop_a; running out of cycles in this transition
             lda #$0                ;3  59
