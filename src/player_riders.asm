@@ -244,8 +244,8 @@ animateRider
             sta WSYNC
             dec rider_animate
             bpl animateRider_end
-            lda player_ctrl
-            cmp #<PLAYER_SPRITE_2_CTRL
+            lda rider_ctrl
+            cmp #<RIDER_SPRITE_2_CTRL
             bne animateRider_skipCtrl0
             lda #<PLAYER_SPRITE_0_CTRL
             jmp animateRider_savCtrl0
@@ -255,9 +255,9 @@ animateRider_skipCtrl0
 animateRider_savCtrl0
             sta rider_ctrl
             lda rider_graphics
-            cmp #<PLAYER_SPRITE_2_GRAPHICS
+            cmp #<RIDER_SPRITE_2_GRAPHICS
             bne animateRider_skipGraphics0
-            lda #<PLAYER_SPRITE_0_GRAPHICS
+            lda #<RIDER_SPRITE_0_GRAPHICS
             jmp animateRider_savGraphics0
 animateRider_skipGraphics0
             clc
@@ -424,10 +424,9 @@ logo_loop
     ; SC 192
     ; 30 lines of overscan to follow
 
-            ldx #00
+            ldx #30
 doOverscan  sta WSYNC               ; wait a scanline
-            inx
-            cpx #30
+            dex
             bne doOverscan
             lda #$01
             bit SWCHB
@@ -514,6 +513,7 @@ rider_A_resp; strobe resp
 rider_A_hmov; locating rider horizontally 2
             sta WSYNC                     ;3   0 
             sta HMOVE                     ;3   3 ; process hmoves
+rider_A_hmov_0; from rider B
             lda rider_color,x             ;4   7
             sta COLUP1                    ;3  10
             lda #RIDER_HEIGHT - 1         ;2  12
@@ -593,21 +593,23 @@ rider_B_start_l
             lda rider_hmov_0,x      ;4  29
             sta HMP1                ;3  32
             lda tmp                 ;3  35
-            clc                     ;2  37
-            sbc #$03                ;2  39
-            dec player_index        ;5  44
-            bmi rider_B_to_A_resp_l ;2  46
+            sbc #$04                ;2  37
+            dec player_index        ;5  42
+            bmi rider_B_to_A_resp_l ;2  44
 rider_B_resp_l; strobe resp
-            sbc #$01                ;2  48
-            bpl rider_B_resp_l      ;2  55 (50 + (hdelay-6) * 5)
-            SLEEP 2                 ;2  57
-            sta RESP1               ;3  60
-            jmp rider_B_hmov        ;2  62
+            sbc #$01                ;2  46
+            bpl rider_B_resp_l      ;2  58 (48 + 2 * 5)
+            SLEEP 4                 ;4  62
+            sta RESP1               ;3  65
+            jmp rider_B_hmov        ;2  67
 rider_B_to_A_resp_l; strobe resp
-            sbc #$01                ;2  49
-            bpl rider_B_to_A_resp_l ;2  56 (51 + (hdelay-6) * 5)
-            sta RESP1               ;3  59
-            jmp rider_A_hmov        ;2  52
+            sbc #$01                ;2  47
+            bpl rider_B_to_A_resp_l ;2  59 (49 + 2 * 5)
+            SLEEP 3                 ;3  62
+            sta RESP1               ;3  65
+            lda #$0                 ;2  67
+            sta ENAM0               ;3  70
+            jmp rider_A_hmov        ;3  73
 
 rider_B_prestart
             ldy rider_hdelay,x     ;4  50
@@ -615,27 +617,27 @@ rider_B_prestart
             bmi rider_B_start_0    ;2  54
             dey                    ;2  56
             bmi rider_B_start_1    ;2  58
-            sty tmp                ;3  61
-            cpy #$05               ;2  63
-            bpl rider_B_start_l    ;2  65
-            jmp rider_B_start_n    ;3  68
+            clc                    ;2  60
+            sty tmp                ;3  63
+            cpy #$04               ;2  65
+            bpl rider_B_start_l    ;2  67
+            jmp rider_B_start_n    ;3  70
 
 rider_B_to_A_hmov
             lda #$0
             sta ENAM0
-            sta HMM0
-            jmp rider_A_hmov
+            sta WSYNC
+            sta HMOVE
+            jmp rider_A_hmov_0
 
 rider_B_to_A_loop
             lda #$0
             sta ENAM0
-            sta HMM0
             jmp rider_A_loop
 
 rider_B_to_A_loop_a; running out of cycles in this transition
             lda #$0                ;3  59
             sta ENAM0              ;3  62
-            sta HMM0               ;3  65
             dec rider_index        ;5  70 ; copy rider_A_loop_a
             sta WSYNC              ;3  0  ; copy rider_A_end
             sta HMOVE              ;3  3
@@ -736,8 +738,7 @@ rider_B_prestart_jmp
 rider_B_to_A_end_a
             lda #$0                ;2  37
             sta ENAM0              ;3  40
-            sta HMM0               ;3  43
-            jmp rider_A_end_a      ;3  46
+            jmp rider_A_end_a      ;3  43
 
 ;-----------------------------------------------------------------------------------
 ; rider movement
