@@ -36,7 +36,6 @@ rider_graphics  ds 2
 rider_color     ds 5
 rider_hdelay    ds 5
 rider_hmov_0    ds 5
-rider_hmov_1    ds 5
 rider_timer     ds 5
 rider_hit       ds 1
 player_animate  ds 1
@@ -128,11 +127,6 @@ Reset
             stx player_charge
             stx player_hit
             stx player_hmov
-            stx rider_hmov_1
-            stx rider_hmov_1 + 1
-            stx rider_hmov_1 + 2
-            stx rider_hmov_1 + 3
-            stx rider_hmov_1 + 4
             ldx #PLAYER_SPEED
             stx player_animate
             ldx #RIDER_SPEED
@@ -174,8 +168,7 @@ vBlank      sta WSYNC
 
 ; SL -21
             sta WSYNC
-            lda player_hit
-            sta COLUPF
+            ; BUGBUG scoring stuff
 
 ; SL -20
 animatePlayer
@@ -463,18 +456,17 @@ logo_loop
             sta COLUBK              ; background colour to black
 
 
+collisions
             lda CXPPMM 
             cmp #$80
-            bmi player_miss
-            inc player_hit
-            
-player_miss
+            bmi collisions_player_miss
+            dec player_hit
+collisions_player_miss
             lda CXP1FB
             cmp #$40
-            bne yari_miss
+            bne collisions_yari_miss
             inc rider_hit
-
-yari_miss
+collisions_yari_miss
 
 
     ; SC 192
@@ -572,10 +564,10 @@ rider_A_hmov; locating rider horizontally 2
 rider_A_hmov_0; from rider B
             lda rider_color,x             ;4   7
             sta COLUP1                    ;3  10
-            lda rider_hmov_1,x            ;4  14
-            ldy #RIDER_HEIGHT - 1         ;2  16
-            dec player_vdelay             ;5  21
-            SLEEP 3
+            lda #$0                       ;2  12
+            ldy #RIDER_HEIGHT - 1         ;2  14
+            dec player_vdelay             ;5  19
+            SLEEP 5                       ;5  24
             sta HMP1                      ;3  27
             beq rider_A_to_B_loop         ;2  29
 
@@ -732,7 +724,7 @@ rider_B_hmov; locating rider horizontally
 
             lda rider_color,x       ;4  29
             sta COLUP1              ;3  32
-            lda rider_hmov_1,x      ;4  41
+            lda #$0                 ;4  41
             sta HMP1                ;3  52
             ldy #RIDER_HEIGHT - 1   ;2  34
             lda #$00                ;2
