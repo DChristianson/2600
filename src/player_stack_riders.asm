@@ -490,20 +490,20 @@ doOverscan_end
 
 rider_A_to_B_hmov
             lda #$ff
-            sta ENABL
             sta HMBL
+            sta ENABL
             jmp rider_B_hmov
 
 rider_A_to_B_loop
             lda #$ff
-            sta ENABL
             sta HMBL
+            sta ENABL
             jmp rider_B_loop
 
 rider_A_to_B_loop_a
             lda #$ff
-            sta ENABL
             sta HMBL
+            sta ENABL
             jmp rider_B_loop_a
 
 rider_A_to_B_end_a
@@ -527,13 +527,13 @@ rider_A_resp_l; strobe resp
 
 rider_A_to_B_start_l
             sta HMP1                ;3  27
-            lda #$ff                ;2  29
-            sta ENABL               ;3  32
-            sta HMBL                ;3  35
-            dey                     ;2  37
-            dey                     ;2  39
-            dey                     ;2  41
-            dey                     ;2  43
+            dey                     ;2  29
+            dey                     ;2  31
+            dey                     ;2  33
+            dey                     ;2  35
+            lda #$ff                ;2  37
+            sta HMBL                ;3  40
+            sta ENABL               ;3  43
 rider_A_to_B_resp_l; strobe resp
             dey                     ;2  45
             bne rider_A_to_B_resp_l ;2+ 47 (47 + 3 * 5)
@@ -673,11 +673,9 @@ rider_B_to_A_hmov
             sta HMOVE
             jmp rider_A_hmov_0
 
-rider_B_to_A_loop
-            lda #$0
-            sta ENABL
-            jmp rider_A_loop
 rider_B_prestart
+            lda #$0                ;3  43
+            sta COLUPF             ;3  46
             ldy rider_hdelay,x     ;4  50
             dey                    ;2  52
             bmi rider_B_start_0    ;2  54
@@ -720,17 +718,16 @@ rider_B_hmov; locating rider horizontally
             sta COLUPF              ;3  16
             pla                     ;4  20
             sta NUSIZ0              ;3  23
-            sta HMP0                ;3  49
+            sta HMP0                ;3  26
 
-            lda rider_color,x       ;4  29
-            sta COLUP1              ;3  32
-            lda #$0                 ;4  41
-            sta HMP1                ;3  52
-            ldy #RIDER_HEIGHT - 1   ;2  34
-            lda #$00                ;2
-            sta COLUPF              ;3  20
-            plp                     ;5  46 BUGBUG exit
-            bpl rider_B_to_A_loop   ;2  54
+            lda rider_color,x       ;4  30
+            sta COLUP1              ;3  33
+            lda #$00                ;4  37
+            sta HMP1                ;3  40
+            ldy #RIDER_HEIGHT - 1   ;2  42
+            plp                     ;5  45  exit
+            sta COLUPF              ;3  47
+            bpl rider_B_to_A_loop   ;2  49
 
 rider_B_loop  
             sta WSYNC               ;3   0
@@ -774,10 +771,14 @@ rider_B_end_a
             lda #$0                  ;3  39
             sta COLUPF               ;3  42
             jmp riders_end           ;3  45
+
 rider_B_prestart_jmp
-            lda #$0                  ;3  40
-            sta COLUPF               ;3  43
-            jmp rider_B_prestart     ;3  46
+            jmp rider_B_prestart     ;3  40
+
+rider_B_to_A_loop
+            lda #$0
+            sta ENABL
+            jmp rider_A_loop
 
 rider_B_to_A_loop_a; running out of cycles in this transition
             lda #$0                ;3  63
@@ -793,8 +794,8 @@ rider_B_to_A_loop_a_jmp
 
 rider_B_to_A_end_a
             lda #$0                ;2  37
-            sta COLUPF             ;3  40
-            sta ENABL              ;3  43
+            sta ENABL              ;3  40
+            sta COLUPF             ;3  43
             jmp rider_A_end_a      ;3  46
 
 ;-----------------------------------------------------------------------------------
