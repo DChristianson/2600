@@ -41,6 +41,7 @@ rider_hdelay    ds 5
 rider_hmov_0    ds 5
 rider_timer     ds 5
 rider_hit       ds 5
+rider_pattern   ds 1
 player_animate  ds 1
 player_ctrl     ds 2
 player_graphics ds 2
@@ -178,12 +179,13 @@ vBlank      sta WSYNC
 ; scoring kernel
 ; SL -21
             sta WSYNC
-            ldx #NUM_RIDERS - 1   
+            ldx #NUM_RIDERS - 1 
+            ldy #GREEN  
 scoringLoop
             lda rider_hit,X
             and #$80
             beq scoringLoop_end
-            inc rider_color,X
+            sty rider_color,X
             lda #$0
             sta rider_hit,X
 scoringLoop_end
@@ -314,8 +316,8 @@ movePlayer_up
 movePlayer_end
 
 ; SL -8
+            sta WSYNC ; BUGBUG remove?
 animateRider
-            sta WSYNC
             dec rider_animate
             bpl animateRider_end
             lda rider_ctrl
@@ -343,26 +345,45 @@ animateRider_savGraphics0
 animateRider_end
 
             ldx #NUM_RIDERS - 1
+
 ; SL -7 : -3
 moveRider_loop
-            sta WSYNC
-            dec rider_timer,x   ;6   6
-            bpl moveRider_end   ;2   8
-            ldy #RIDER_SPEED    ;2  10
-            sty rider_timer,x   ;4  14
-            lda #$10            ;2  16
-            clc                 ;2  18
-            adc rider_hmov_0,x  ;4  22
-            bvs moveRider_resp  ;2  24
-            sta rider_hmov_0,x  ;4  28  
-            jmp moveRider_end   ;3  31
-moveRider_resp
+            sta WSYNC ; BUGBUG remove
+            dec rider_timer,x         ;6   6
+            bpl moveRider_end         ;2   8
+            ldy #RIDER_SPEED          ;2  10
+            sty rider_timer,x         ;4  14
+            lda #$10                  ;2  16
+            clc                       ;2  18
+            adc rider_hmov_0,x        ;4  22
+            bvs moveRider_dec_hdelay  ;2  24
+            sta rider_hmov_0,x        ;4  28  
+            jmp moveRider_end         ;3  31
+moveRider_dec_hdelay
             lda #$90              ;2  27
             sta rider_hmov_0,x    ;4  31  
             dec rider_hdelay,x    ;6  37
             bpl moveRider_end     ;2  39
-            lda #RIDER_RESP_START ;2  41
-            sta rider_hdelay,x    ;4  45
+moveRider_reset
+            ; reset rider
+            lda #RIDER_RESP_START  ;2  41
+            sta rider_hdelay,x     ;4  45
+            lda rider_pattern      ;3  48 ; Galois LFSA
+            lsr                    ;2  50 ; see https://samiam.org/blog/20130617.html
+            bcc moveRider_skipEor  ;2  52
+            eor #$d4               ;2  54
+moveRider_skipEor
+            sta rider_pattern      ;3  57 
+            lsr
+            bcc moveRider_chooseColor
+            lda #GREEN
+            jmp moveRider_skipCycle
+moveRider_chooseColor
+            and #$04
+            tay
+            lda #RIDER_COLORS,y
+moveRider_skipCycle
+            sta rider_color,x
 moveRider_end
             dex                   ;2  47
             bpl moveRider_loop    ;2  49
@@ -928,8 +949,8 @@ RIDER_SPRITE_2_CTRL
 RIDER_SPRITE_2_GRAPHICS
     byte $0,$44,$22,$a7,$a3,$e7,$67,$7f,$7f,$f8,$ff,$f8,$ff,$f8,$f7,$ee,$ce,$4d,$1e,$3c,$60,$90,$90,$0; 24
 
-
-
+RIDER_COLORS ; 4 bytes
+        byte RED, WHITE, YELLOW, BLACK
 HORIZON_COLOR ; 14 bytes
         byte CLOUD_ORANGE - 2, CLOUD_ORANGE, CLOUD_ORANGE + 2, CLOUD_ORANGE + 4, 250, 252, 254, 252, 250, WHITE_WATER, SKY_BLUE + 8, SKY_BLUE + 4, SKY_BLUE + 2, SKY_BLUE 
 HORIZON_COUNT ; 14 bytes
