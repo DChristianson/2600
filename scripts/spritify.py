@@ -1,5 +1,8 @@
 #
-# Generate Screens.jack and Sprites.jack files 
+# Generate Sprite graphics for the VCS
+# can generate 8 bit, 24, or 48 bit sprites
+# 8 bit supports converting higher res images
+# by also manipulating control and hmov registers
 #
 
 import sys
@@ -14,7 +17,6 @@ import queue
 from dataclasses import dataclass, field
 import argparse
 
-aseprite_path = '/Users/dchristianson/Library/Application Support/Steam/steamapps/common/Aseprite/Aseprite.app/Contents/MacOS'
 explicit_zero = False
 
 def pairwise(iterable):
@@ -28,7 +30,7 @@ def chunker(iterable, n):
 
 def aseprite_save_as(input, output):
     print(f'converting: {input} -> {output}')
-    out = subprocess.run([f'{aseprite_path}/aseprite', '-b', input, '--save-as', output])
+    out = subprocess.run([f'aseprite', '-b', input, '--save-as', output])
     out.check_returncode()
 
 
@@ -152,7 +154,8 @@ def find_offset_solution(compressedbits, solve_left=True, solve_right=False):
     raise Exception(f'cannot find solution at depth {max_depth}')
             
 # variable resolution sprite
-def emit_sprite8(varname, image, fp, width=24, reverse=False, lr_solve=False):
+def emit_varsprite8(varname, image, fp, reverse=False):
+    width, _ = image.size
     if not image.mode == 'RGBA':
         image = image.convert(mode='RGBA')
     data = image.getdata()
@@ -161,33 +164,31 @@ def emit_sprite8(varname, image, fp, width=24, reverse=False, lr_solve=False):
         rows = [tuple(reversed(row)) for row in rows]
 
     compressedbits = list([compress8(list(row)) for row in rows])
-    solution = find_offset_solution(compressedbits, solve_left=True, solve_right=lr_solve)
+    solution = find_offset_solution(compressedbits, solve_left=True)
 
     left_delta = list([step[0] for step in solution[1:]] + [0])
-    right_delta = list([step[1] for step in solution[1:]] + [0])
     padded_bits = list([step[2][2] for step in solution])
 
     nusizes = list([ nusize(cb.scale) for cb in compressedbits])
     ctrl = list([hmove(offset) + size for offset, size in zip(left_delta, nusizes)])
-    ctrr = list([hmove(-offset) + size for offset, size in zip(right_delta, nusizes)]) if lr_solve else None
     graphics = list([bits2int(bits) for bits in padded_bits])
 
     # write output
-    for name, col in [('ctrl', ctrl), ('ctrr', ctrr), ('graphics', graphics)]:
-        if col is None:
-            continue
+    for name, col in [('ctrl', ctrl), ('graphics', graphics)]:
         value = ','.join([int2asm(word) for word in reversed(col)])
         fp.write(f'{varname}_{name}\n'.upper())
         fp.write(f'    byte {value}; {len(col)}\n')
 
-# full sized sprite
-def emit_sprite24(varname, image, fp):
+# multi-player sprite
+def emit_spriteMulti(varname, image, fp, bits=24):
+    width, height = image.size
     if not image.mode == 'RGBA':
         image = image.convert(mode='RGBA')
     data = image.getdata()
-    vars = [[], [], []]
+    cols = int(bits / 8)
+    vars = [[]] * cols
     for i, word in enumerate([bits2int(chunk) for chunk in chunker(map(bit, data), 8)]):
-        vars[i % 3].append(word)
+        vars[i % cols].append(word)
     fp.write(f'{varname}\n'.upper())
     for col in vars:
         value = ','.join([int2asm(word) for word in reversed(col)])
@@ -197,7 +198,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Generate 6502 assembly for sprite graphics')
     parser.add_argument('--reverse', type=bool, default=False)
-    parser.add_argument('--bits', type=int, choices=[8, 24], default=8)
+    parser.add_argument('--bits', type=int, choices=[8, 24, 48], default=8)
     parser.add_argument('filenames', nargs='*')
 
     args = parser.parse_args()
@@ -207,22 +208,19 @@ if __name__ == "__main__":
     for filename in args.filenames:
         spritename, ext = os.path.splitext(path.basename(filename))
         aseprite_save_as(filename, f'data/{spritename}_001.png')
-        sprites[spritename] = list(glob.glob(f'data/{spritename}_*.png'))
+        sprites[spritename] = sorted(list(glob.glob(f'data/{spritename}_*.png')))
 
     out = sys.stdout
     for spritename, files in sprites.items():
-        if args.bits == 24:
-            for i, filename in enumerate(files):
-                varname = f'{spritename}_{i}'
-                with Image.open(filename, 'r') as image:
-                    emit_sprite24(varname, image, out)
-        else:
-            # 8 bit
-            for i, filename in enumerate(files):
-                varname = f'{spritename}_{i}'
-                with Image.open(filename, 'r') as image:
-                    emit_sprite8(varname, image, out, lr_solve=(not args.reverse))
-                    if args.reverse:
-                        emit_sprite8(varname + '_r', image, out, reverse=True)
+        for i, filename in enumerate(files):
+            varname = f'{spritename}_{i}'
+            with Image.open(filename, 'r') as image:
+                width, _ = image.size
+                if args.bits > 8:
+                    emit_spriteMulti(varname, image, out, bits=args.bits)
+                if width == 8:
+                    emit_spriteMulti(varname, image, out, bits=8)
+                else:
+                    emit_varsprite8(varname, image, out, reverse=args.reverse)
 
         
