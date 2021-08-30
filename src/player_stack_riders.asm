@@ -26,9 +26,10 @@ RIDER_ANIMATE_SPEED = 3
 PLAYER_ANIMATE_SPEED = 3
 PLAYER_STRIKE_COUNT = 48
 RIDER_RESP_START = 8
+RIDER_GREEN_TYPE = $44
 RAIL_HEIGHT = 6
 LOGO_HEIGHT = 6
-
+WINNING_SCORE = $11
 ; ----------------------------------
 ; variables
 
@@ -36,14 +37,14 @@ LOGO_HEIGHT = 6
 
     ORG $80
 
+game_state      ds 1
 rider_animate   ds 1
+rider_timer     ds 5
 rider_ctrl      ds 2
 rider_graphics  ds 2
-rider_color     ds 5
 rider_hdelay    ds 5
 rider_hmov_0    ds 5
-rider_speed     ds 5
-rider_timer     ds 5
+rider_type      ds 5
 rider_hit       ds 5
 rider_damaged   ds 5
 rider_pattern   ds 1
@@ -59,9 +60,9 @@ player_fire     ds 1
 player_damaged  ds 1
 player_health   ds 1
 player_score    ds 1
-score_addr
-tmp             ds 1
-tmp_alt         ds 1
+tmp                  ; overlapping ram
+score_addr_0    ds 2 ; used in scoring kernels
+score_addr_1    ds 2 ; used in scoring kernels
 
     SEG
 
@@ -94,6 +95,7 @@ Reset
             lda #$05
             sta CTRLPF
 
+init_game
   ; rider positions
             lda #>PLAYER_SPRITE_START
             sta player_ctrl+1
@@ -111,39 +113,22 @@ Reset
             lda #<RIDER_SPRITE_0_GRAPHICS
             sta rider_graphics
 
-            lda #GREEN
-            sta rider_color
-            sta rider_color + 1
-            sta rider_color + 2
-            sta rider_color + 3
-            sta rider_color + 4
-            ldx #$70
-            stx rider_hmov_0
-            stx rider_hmov_0 + 1
-            stx rider_hmov_0 + 2
-            stx rider_hmov_0 + 3
-            stx rider_hmov_0 + 4
-            ldx #$01
-            stx player_vpos
-            stx rider_timer
-            stx rider_timer + 1
-            stx rider_timer + 2
-            stx rider_timer + 3
-            stx rider_timer + 4
-            stx rider_speed
-            stx rider_speed + 1
-            stx rider_speed + 2
-            stx rider_speed + 3
-            stx rider_speed + 4
-            stx rider_pattern
-            ldx #$ff
-            stx rider_damaged
-            stx rider_damaged + 1
-            stx rider_damaged + 2
-            stx rider_damaged + 3
-            stx rider_damaged + 4
-            stx player_health
+            ldx #NUM_RIDERS - 1
+init_rider_loop
+            lda #RIDER_GREEN_TYPE
+            sta rider_type,x
+            lda #$70
+            sta rider_hmov_0,x
+            lda #$ff
+            sta rider_damaged,x
+            dex
+            bpl init_rider_loop
 
+            ldx #RIDER_ANIMATE_SPEED
+
+            ldx #$28
+            stx player_vpos
+            stx rider_pattern
 
 newFrame
 
@@ -167,16 +152,20 @@ newFrame
             sta VSYNC               ; turn OFF VSYNC bit 1
 
     ; 37 scanlines of vertical blank to follow
+
+;--------------------
+; VBlank start
+; SL 0-6 
             lda #1
             sta VBLANK
-            ldx #37 - 31
+            ldx #$06
 vBlank      sta WSYNC
             dex
             bne vBlank
 
 ;---------------------
 ; scoring kernel
-; SL -31
+; SL 6/7-11
             ldx #NUM_RIDERS - 1 
             dec player_damaged
             bpl scoringLoop
@@ -184,8 +173,8 @@ vBlank      sta WSYNC
             sta player_damaged
 scoringLoop
             sta WSYNC
-            lda rider_color,x
-            cmp #GREEN 
+            lda rider_type,x
+            cmp #RIDER_GREEN_TYPE
             beq scoringLoop_end         
             lda rider_damaged,x
             bpl scoringLoop_decay
@@ -198,10 +187,14 @@ scoringLoop
             lda player_fire
             beq scoringLoop_player_hit
 scoringLoop_rider_hit
-            inc player_score
+            sed
+            lda player_score
+            adc #$01
+            sta player_score
+            cld
             lda #$10
             sta rider_damaged,x
-            jmp scoringLoop_decay
+            jmp scoringLoop_end
 scoringLoop_player_hit
             asl player_health
             lda #$10
@@ -210,21 +203,26 @@ scoringLoop_player_hit
             sta player_charge
 scoringLoop_decay
             sbc #$01
+            bmi scoringLoop_rider_clear
             sta rider_damaged,x
-            sta rider_color,x
-            bpl scoringLoop_end
+            inc rider_type,x
+            jmp scoringLoop_end
 scoringLoop_rider_clear
-            lda #GREEN
-            sta rider_color,x
+            lda #RIDER_GREEN_TYPE
+            sta rider_type,x
             lda #$ff
             sta rider_damaged,x
 scoringLoop_end
             dex
             bpl scoringLoop
 
-; SL -26
+;-----------------------------
+; animate player
+; SL 12 (-26 till picture)
 animatePlayer
             sta WSYNC
+            lda game_state           
+            beq animatePlayer_end           
             lda player_damaged
             beq animatePlayer_seq
             ldy #<PLAYER_SPRITE_3_CTRL
@@ -252,7 +250,7 @@ animatePlayer_save
             sta player_animate
 animatePlayer_end
 
-; SL -25 : -17
+; SL 12-21 
 ; we're going to copy the current graphics to the stack
             ldy #$0    
 stackPlayer_loop
@@ -278,9 +276,32 @@ animatePlayer_fire_active
             sta $dd
 animatePlayer_fire_end
 
-; SL -16
-movePlayer
+; SL 22
             sta WSYNC                ;3   0
+            lda game_state           ;3   3    
+            bne movePlayer           ;2   5
+movePlayer_game
+; SL 23
+            sta WSYNC
+            lda #$80                 ;3   8
+            bit INPT4                ;3  11
+            bne movePlayer_game_check;2  13
+            lda #1
+            sta player_charge        ;5  18
+            jmp movePlayer_end
+movePlayer_game_check
+            lda player_charge
+            beq movePlayer_end
+            lda #$0
+            sta player_charge
+            sta player_score
+            ldx #$ff
+            stx player_health
+            lda #$23
+            sta game_state
+            jmp movePlayer_end
+
+movePlayer
             lda player_damaged       ;3   3
             bne movePlayer_dir       ;2   5
             lda #$80                 ;3   8
@@ -296,8 +317,9 @@ movePlayer_button_up
 movePlayer_button_up_done
             lda #0               ;2  33
             sta player_charge    ;3  36
-; SL -15
+
 movePlayer_dir
+; SL 23
             sta WSYNC            ;3   0
             lda player_fire
             bne movePlayer_fire
@@ -343,8 +365,8 @@ movePlayer_up
             
 movePlayer_end
 
-; SL -14
-            sta WSYNC ; BUGBUG remove?
+; SL 24
+            sta WSYNC 
 animateRider
             dec rider_animate
             bpl animateRider_end
@@ -374,53 +396,56 @@ animateRider_end
 
             ldx #NUM_RIDERS - 1
 
-; SL -13 : -3
+; SL 25-34           
 moveRider_loop
             sta WSYNC
-            dec rider_timer,x         ;6   6
-            bpl moveRider_noreset     ;2   8
-            ldy rider_speed,x         ;4  12
-            sty rider_timer,x         ;4  16
-            lda #$10                  ;2  18
-            clc                       ;2  20
-            adc rider_hmov_0,x        ;4  24
-            bvs moveRider_dec_hdelay  ;2  26
-            sta rider_hmov_0,x        ;4  30  
-            jmp moveRider_noreset     ;3  33
+            lda game_state            ;3   3    
+            beq moveRider_noreset     ;2   5
+            dec rider_timer,x         ;6  11
+            bpl moveRider_noreset     ;2  13
+            lda rider_type,x          ;4  17
+            lsr                       ;2  19
+            lsr                       ;2  21
+            lsr                       ;2  23
+            lsr                       ;2  25
+            sta rider_timer,x         ;4  29
+            lda #$10                  ;2  31
+            clc                       ;2  33
+            adc rider_hmov_0,x        ;4  37
+            bvs moveRider_dec_hdelay  ;2  39
+            sta rider_hmov_0,x        ;4  43  
+            jmp moveRider_noreset     ;3  46
 moveRider_dec_hdelay
-            lda #$90              ;2  29
-            sta rider_hmov_0,x    ;4  33  
-            dec rider_hdelay,x    ;6  39
-            bpl moveRider_noreset ;2  41
+            lda #$90              ;2  42
+            sta rider_hmov_0,x    ;4  46  
+            dec rider_hdelay,x    ;6  52
+            bpl moveRider_noreset ;2  54
 moveRider_reset
             ; reset rider
-            lda #RIDER_RESP_START  ;2  43
-            sta rider_hdelay,x     ;4  47
-            lda #$b0               ;2  49 ; adjust hmov to avoid wraparound
-            sta rider_hmov_0,x     ;4  53  
-            lda rider_pattern      ;3  56 ; Galois LFSA
-            lsr                    ;2  58 ; see https://samiam.org/blog/20130617.html
-            bcc moveRider_skipEor  ;2  60
-            eor #$8e               ;2  62
+            lda #RIDER_RESP_START  ;2  56
+            sta rider_hdelay,x     ;4  60
+            lda #$b0               ;2  62 ; adjust hmov to avoid wraparound
+            sta rider_hmov_0,x     ;4  66  
+            lda rider_pattern      ;3  69 ; Galois LFSA
+            lsr                    ;2  71 ; see https://samiam.org/blog/20130617.html
+            bcc moveRider_skipEor  ;2  73
+            eor #$8e               ;2  75
 moveRider_skipEor
-            sta rider_pattern         ;3  65 
-            lsr                       ;2  67
-            bcc moveRider_chooseColor ;2  69
-            lda #GREEN                ;2  71
-            jmp moveRider_skipCycle   ;3  74
+            sta rider_pattern      ;3  78 
+            ; lsr                       ;2  67
+            ; bcc moveRider_chooseColor ;2  69
+            ; lda #RIDER_GREEN_TYPE     ;2  71
+            ; jmp moveRider_skipCycle   ;3  74
 moveRider_chooseColor
-            and #$03               ;2   76
-            sta rider_speed,x      ;4   80
-            tay                    ;2   82
-            lda #RIDER_COLORS,y    ;4   86
+            and game_state         ;3   81
 moveRider_skipCycle
-            sta rider_color,x      ;4   90
-            jmp moveRider_end      ;3   93
+            sta rider_type,x       ;4   85
+            jmp moveRider_end      ;3   88
 moveRider_noreset
-            sta WSYNC              ;3   0
+            sta WSYNC              ;3    0
 moveRider_end
-            dex                   ;2  85
-            bpl moveRider_loop    ;2  87
+            dex                    ;2   90
+            bpl moveRider_loop     ;2   92
 
 ; -----------------------------------
 ; Display kernels
@@ -431,7 +456,7 @@ moveRider_end
 ; 36 variable width bands of color gradient 
 
 ; horizon + score kernel
-; SL -2
+; SL 35
 
             sta WSYNC
             lda #$b0               ;2   2
@@ -444,7 +469,7 @@ horizonScore_resp
             bpl horizonScore_resp  ;2  62 (17 + 45)
             sta RESP0              ;3  65
             sta RESP1              ;3  68
-; SL -1
+; SL 36
             sta WSYNC
             sta HMOVE              ;3   3
             lda #WHITE             ;2   5
@@ -454,32 +479,45 @@ horizonScore_resp
             sta VBLANK             ;3  16
 
             ldx #13                ;2  18  
-; SL 0
+; SL 37 (Display 0)
             sta WSYNC
             lda HORIZON_COLOR,x      ;4   4 
             sta COLUBK               ;3   7
             lda player_score
+            and #$0f
             asl
             asl
             asl
             adc #<FONT_0
-            sta score_addr
+            sta score_addr_1
             lda #>FONT_0
-            sta score_addr + 1
+            sta score_addr_1 + 1
+            lda player_score
+            lsr
+            lsr
+            lsr
+            lsr
+            asl
+            asl
+            asl
+            adc #<FONT_0
+            sta score_addr_0
+            lda #>FONT_0
+            sta score_addr_0 + 1
             ldy #$07
 
-; SL 1..8
+; SL 38-45
 horizonScore_Loop
             sta WSYNC
             lda player_health        ;3   3
             sta PF1                  ;3   6
             lda HORIZON_COLOR,x      ;4  10 
             sta COLUBK               ;3  13
-            lda (score_addr),y       ;5  18
+            lda (score_addr_0),y       ;5  18
             sta GRP0                 ;3  21
             lda #RED                 ;2  23
             sta COLUPF               ;3  26
-            lda (score_addr),y       ;5  31
+            lda (score_addr_1),y       ;5  31
             sta GRP1                 ;3  34
             SLEEP 5
             lda #$00
@@ -496,7 +534,7 @@ horizonScore_Loop
 horizonScore_End
 
 ; horizon + sun kernel 
-; SL 9
+; SL 46
             ldy #$04                 ;2  48
             sta WSYNC
             lda HORIZON_COLOR,x      ;4   4 
@@ -517,7 +555,7 @@ horizonSun_resp
             lda #1                   ;2  60             
             sta NUSIZ0               ;3  63
 
-; SL 10
+; SL 47
 horizonSun_hmov
             sta WSYNC                ;3   0
             sta HMOVE                ;3   3
@@ -528,7 +566,7 @@ horizonSun_hmov
             sta COLUP1               ;3  11
             dex                      ;2  13 ; hardcode
 
-; SL 11 ... 36
+; SL 48 ... 72
 
             ldy #24                  ;2  15
 horizonLoop
@@ -569,7 +607,7 @@ horizonEnd
 ;
 ; locating player first
 ;
-    ; SC 36           
+    ; SC 73           
             sta WSYNC                ;3   0
             lda #GREEN               ;2   2
             sta COLUBK               ;3   5
@@ -583,7 +621,7 @@ player_resp_loop
             lda player_vpos          ;3  42 
             sta player_vdelay        ;3  45
 
-    ; SC 37
+    ; SC 74
             sta WSYNC                ;3   0
             lda player_hmov          ;3   3
             ldy #4                   ;2   5
@@ -594,25 +632,25 @@ yari_resp_loop
             sta HMP0                 ;3  35
             sta HMBL                 ;3  38
 
-    ; SC 38
+    ; SC 75
             sta WSYNC                ;3   0
-            sta HMOVE                ;3   3
+            ldx #$03                 ;3   3
+player_boost_delay
+            dex                      ;2   5
+            bpl player_boost_delay   ;2  22 (7 + 3 * 5)
+            lda player_hmov_x        ;3  25
+            sta HMP0                 ;3  28
+            lda #$00                 ;2  30
+            sta HMBL                 ;3  33
 
-    ; SC 39
-            sta WSYNC                ;3   0
-            lda player_hmov_x        ;3   3
-            sta HMP0                 ;3   6
-            lda #$00                 ;2   8
-            sta HMBL                 ;3  11
-
-    ; SC 40
+    ; SC 76
             sta WSYNC                ;3   0
             sta HMOVE                ;3   3
 
 ;-------------------
 ; top rail kernel
 
-    ; SC 41 .. 46
+    ; SC 77 .. 85
             ldx #RAIL_HEIGHT         ;2  10
 rail_A_loop 
             sta WSYNC                ;3   0
@@ -626,7 +664,7 @@ rail_A_loop
 ; sp used for player graphics index
 
 
-    ; SC 46 .. 181 (27 * 5)
+    ; SC 86 .. 219 (27 * 5)
 riders_start
             stx HMP0                 ;3   7
             sta CXCLR                ;3  13
@@ -663,10 +701,18 @@ doOverscan  sta WSYNC               ; wait a scanline
             bne doOverscan
             lda #$01
             bit SWCHB
-            bne doOverscan_end
+            bne gameCheck
             jmp Reset
-
-doOverscan_end
+gameCheck
+            lda player_score
+            cmp #WINNING_SCORE
+            bpl gameEnd
+            lda player_health
+            bne gameContinue
+gameEnd
+            lda #0
+            sta game_state
+gameContinue
             jmp newFrame
 
 ;-----------------------------------------------------------------------------------
@@ -748,15 +794,17 @@ rider_A_hmov; locating rider horizontally 2
             sta WSYNC                     ;3   0 
             sta HMOVE                     ;3   3 ; process hmoves
 rider_A_hmov_0; from rider B
-            lda rider_color,x             ;4   7
-            sta COLUP1                    ;3  10
-            lda #$0                       ;2  12
-            ldy #RIDER_HEIGHT - 1         ;2  14
-            dec player_vdelay             ;5  19
-            sta CXCLR                     ;3  22 prep for collision
-            SLEEP 2                       ;5  24 timing shim
-            sta HMP1                      ;3  27
-            beq rider_A_to_B_loop         ;2  29
+            lda rider_type,x              ;4   7
+            and #$0f                      ;2   9
+            tay                           ;2  11
+            lda RIDER_COLORS,y            ;4  15
+            sta COLUP1                    ;3  18
+            lda #$0                       ;2  20
+            ldy #RIDER_HEIGHT - 1         ;2  22
+            dec player_vdelay             ;5  27
+            sta CXCLR                     ;3  30 prep for collision
+            sta HMP1                      ;3  33
+            beq rider_A_to_B_loop         ;2  35
 
 rider_A_loop;
             sta WSYNC               ;3   0
@@ -934,15 +982,18 @@ rider_B_hmov_a
             pla                     ;4  20
             sta NUSIZ0              ;3  23
             sta HMP0                ;3  26
-            lda rider_color,x       ;4  30
-            sta COLUP1              ;3  33
-            lda #$00                ;4  37
-            sta HMP1                ;3  40
-            ldy #RIDER_HEIGHT - 1   ;2  42
-            sta CXCLR               ;3  45 prep for collision
-            sta COLUPF              ;3  48
-            plp                     ;5  53  exit
-            bpl rider_B_to_A_loop   ;2  55
+            lda rider_type,x        ;4  30
+            and #$0f                ;2  32
+            tay                     ;2  34
+            lda RIDER_COLORS,y      ;4  38
+            sta COLUP1              ;3  41
+            lda #$00                ;4  45
+            sta HMP1                ;3  48
+            ldy #RIDER_HEIGHT - 1   ;2  50
+            sta CXCLR               ;3  53 prep for collision
+            sta COLUPF              ;3  56
+            plp                     ;5  61  exit
+            bpl rider_B_to_A_loop   ;2  63
 
 rider_B_loop  
             sta WSYNC               ;3   0
@@ -1018,14 +1069,6 @@ rider_B_to_A_end_a
 ;-----------------------------------------------------------------------------------
 ; sprite graphics
 
-HORIZON_COLOR ; 14 bytes
-        byte CLOUD_ORANGE - 2, CLOUD_ORANGE, CLOUD_ORANGE + 2, CLOUD_ORANGE + 4, 250, 252, 254, 252, 250, WHITE_WATER, SKY_BLUE + 8, SKY_BLUE + 4, SKY_BLUE + 2, SKY_BLUE 
-HORIZON_COUNT ; 14 bytes
-        byte $0, $2, $4, $6, $7, $8, $b, $13, $16, $17, $18, $0, $2, $4 
-SUN_SPRITE_LEFT ; 26
-        byte $ff,$ff,$ff,$ff,$7f,$7f,$7f,$7f,$3f,$3f,$3f,$1f,$1f,$f,$f,$7,$3,$1,$0,$0,$0,$0,$0,$0,$0
-SUN_SPRITE_MIDDLE ; 26
-        byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$3c,$0,$0,$0,$0,$0
 FONT_0
         byte $3c,$7e,$66,$66,$66,$66,$7e,$3c; 8
 FONT_1
@@ -1067,6 +1110,11 @@ PLAYER_SPRITE_3_CTRL
 PLAYER_SPRITE_3_GRAPHICS
     byte $0,$66,$a4,$66,$63,$63,$d8,$e7,$ff,$f8,$7f,$f8,$7f,$f8,$7f,$3f,$7f,$7f,$ce,$f6,$f3,$60,$90,$90; 24
 
+SUN_SPRITE_LEFT ; 26
+        byte $ff,$ff,$ff,$ff,$7f,$7f,$7f,$7f,$3f,$3f,$3f,$1f,$1f,$f,$f,$7,$3,$1,$0,$0,$0,$0,$0,$0,$0
+SUN_SPRITE_MIDDLE ; 26
+        byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$3c,$0,$0,$0,$0,$0
+
     ORG $F700
 
 RIDER_SPRITE_START
@@ -1087,9 +1135,14 @@ RIDER_SPRITE_3_CTRL
 RIDER_SPRITE_3_GRAPHICS
     byte $0,$33,$4a,$4e,$43,$47,$f8,$e7,$ff,$f8,$fe,$f8,$fe,$f8,$7f,$7e,$fe,$fe,$ce,$96,$cf,$60,$90,$90; 24
 
-RIDER_COLORS ; 4 bytes
-        byte BROWN, RED, WHITE, YELLOW
-    
+RIDER_COLORS ; 5 bytes
+        byte BROWN, RED, WHITE, YELLOW, GREEN
+
+HORIZON_COLOR ; 14 bytes
+        byte CLOUD_ORANGE - 2, CLOUD_ORANGE, CLOUD_ORANGE + 2, CLOUD_ORANGE + 4, 250, 252, 254, 252, 250, WHITE_WATER, SKY_BLUE + 8, SKY_BLUE + 4, SKY_BLUE + 2, SKY_BLUE 
+HORIZON_COUNT ; 14 bytes
+        byte $0, $2, $4, $6, $7, $8, $b, $13, $16, $17, $18, $0, $2, $4 
+   
 ;-----------------------------------------------------------------------------------
 ; the CPU reset vectors
 
