@@ -218,7 +218,7 @@ if __name__ == "__main__":
                 width, _ = image.size
                 if args.bits > 8:
                     emit_spriteMulti(varname, image, out, bits=args.bits)
-                if width == 8:
+                elif width == 8:
                     emit_spriteMulti(varname, image, out, bits=8)
                 else:
                     emit_varsprite8(varname, image, out, reverse=args.reverse)
