@@ -25,8 +25,8 @@ PLAYER_START_HEALTH = 10
 RIDER_ANIMATE_SPEED = 3
 PLAYER_ANIMATE_SPEED = 3
 PLAYER_STRIKE_COUNT = 48
-RIDER_RESP_START = $b9
-RIDER_GREEN_TYPE = $44
+RIDER_RESP_START = $b8
+RIDER_GREEN_TYPE = $48
 RAIL_HEIGHT = 6
 LOGO_HEIGHT = 6
 WINNING_SCORE = $99
@@ -303,7 +303,7 @@ movePlayer_game_check
             sta player_score
             ldx #$ff
             stx player_health
-            lda #$23
+            lda #$27
             sta game_state
             jmp movePlayer_end
 
@@ -449,6 +449,11 @@ moveRider_skipCycle
 moveRider_noreset
             sta WSYNC              ;3    0
 moveRider_end
+            lda rider_type,x
+            and #$0f
+            tay
+            lda RIDER_COLORS,y
+            sta rider_colors,x
             dex                    ;2   90
             bpl moveRider_loop     ;2   92
 
@@ -678,7 +683,7 @@ riders_start
             sta tmp_addr_0+1
             sta tmp_addr_1+1
             ldx #NUM_RIDERS - 1      ;2  15
-            jmp rider_A_start        ;3  17
+            jmp rider_A_prestart     ;3  17
 
 riders_end
 
@@ -741,83 +746,70 @@ gameContinue
 ; A Y9 SC 67 PP 147
 
 rider_A_start_l
-            lda tmp                  ;3  22
-            sta HMP1                 ;3  25
-            dec player_vdelay        ;5  30
-            beq rider_A_to_B_start_l ;2  32
-            dey                      ;2  34
-            dey                      ;2  36
-            dey                      ;2  38
+            sta WSYNC                ;3   0 
+            sta HMOVE                ;3   3
+            tay                      ;2   5
+            dec player_vdelay        ;5  10
+            beq rider_A_to_B_start_l ;2  12
 rider_A_resp_l; strobe resp
-            dey                      ;2  40
-            bne rider_A_resp_l       ;2+ 67 (42 + 5 * 5)
-            sta RESP1                ;3  70 
-            jmp rider_A_hmov            
+            dey                      ;2  14
+            bpl rider_A_resp_l       ;2+ 56 (16 + 8 * 5)
+            lda tmp                  ;3  59
+            sta HMP1                 ;3  62
+            sta RESP1                ;3  65 
+            jmp rider_A_hmov         ;3  68 
 
 rider_A_to_B_start_l
-            lda player_fire            ;3  36
-            bne rider_A_to_B_resp_sha  ;2  38
-            lda #$ff                   ;2  40
-            sta HMBL                   ;3  43
-            sta ENABL                  ;3  46
-rider_A_to_B_resp_shb           
-            tya                        ;2  48
-            cmp #$07                   ;2  50
-            bpl rider_A_to_B_resp_sh7  ;2  52
-            sta RESP1                  ;3  55 
-            jmp rider_B_hmov           ;3  58
+            dey                      ;2  15
+            lda player_fire          ;3  18
+            bne rider_A_to_B_resp_l  ;2  20
+            lda #$ff                 ;2  22
+            sta ENABL                ;3  25
+            sta HMBL                 ;3  28
+            dey                      ;2  30
+            dey                      ;2  32
+            dey                      ;2  34
+            dey                      ;2  36
+            SLEEP 5                  ;5  41
+rider_A_to_B_resp_l          
+            dey                      ;2  23 / 43
+            bpl rider_A_to_B_resp_l  ;2+ 60 (25 / 45 + 7 * 5 / 3 * 5)
+            SLEEP 2                  ;2  62
+            sta RESP1                ;3  65 
+            lda tmp                  ;3  68
+            sta HMP1                 ;3  71
+            sta WSYNC                ;3   0
+            sta HMOVE                ;3   3
+            jmp rider_B_hmov_a       ;3   6 
 
-rider_A_to_B_resp_sha
-            SLEEP 4                    ;4  43
-            jmp rider_A_to_B_resp_shb  ;3  46
-              
-rider_A_to_B_resp_sh7
-            cmp #$08                   ;2  55
-            bpl rider_A_to_B_resp_sh8  ;2  57
-            sta RESP1                  ;3  55 
-            jmp rider_B_hmov           ;3  58
-
-rider_A_to_B_resp_sh8
-            cmp #$09                   ;2  60
-            bpl rider_A_to_B_resp_sh9  ;2  62
-            sta RESP1                  ;3  65 
-            jmp rider_B_hmov           ;3  68
-
-rider_A_to_B_resp_sh9
-            SLEEP 4                    ;4  67
-            sta RESP1                  ;3  70
-            jmp rider_B_hmov           ;3  73
+rider_A_prestart
+            lda rider_hpos,x        ;4  --
+            sta tmp                 ;3  --
+            and #$0f                ;2  --
+            cmp #$05                ;2  --
+            bpl rider_A_start_l     ;2  --
 
 rider_A_start
             ; locate p1
             sta WSYNC               ;3   0 
             sta HMOVE               ;3   3
-            lda rider_hpos,x        ;4   7
-            sta tmp                 ;3  10
-            and #$0f                ;2  12
-            tay                     ;2  14
-            cmp #$06                ;2  16
-            bpl rider_A_start_l     ;2  18
+            tay                     ;2   5
+            iny                     ;2   7
 rider_A_resp; strobe resp 
-            dey                     ;2  20 
-            bpl rider_A_resp        ;2+ 52 (22 + 6 * 5)
-            sta RESP1               ;3  55 
-            lda tmp                 ;3  58
-            sta HMP1                ;3  61
-            dec player_vdelay       ;5  66
-            bne rider_A_hmov        ;2  68
+            dey                     ;2   9 
+            bpl rider_A_resp        ;2+ 36 (11 + 5 * 5)
+            lda tmp                 ;3  39
+            sta HMP1                ;3  42
+            sta RESP1               ;3  50 
+            dec player_vdelay       ;5  55
+            bne rider_A_hmov        ;2  57
 rider_A_to_B_hmov
-            lda player_fire           ;3  71
-            bne rider_A_to_B_hmov_jmp ;2  73
-            sta WSYNC                 ;3   0 
-            sta HMOVE                 ;3   3
-            sty HMBL                  ;3   6  ; trick - y is $ff
-            sty ENABL                 ;3   9
-            jmp rider_B_hmov_a        ;3  12
+            lda player_fire           ;3  60
+            bne rider_A_to_B_hmov_jmp ;2  62
+            sty HMBL                  ;3  65  ; trick - y is $ff
+            sty ENABL                 ;3  68
 rider_A_to_B_hmov_jmp
-            sta WSYNC                 ;3   0 
-            sta HMOVE                 ;3   3
-            jmp rider_B_hmov_a        ;3   6
+            jmp rider_B_hmov          ;3  72
 
 rider_A_hmov; locating rider horizontally 2
             sta WSYNC                     ;3   0 
@@ -825,10 +817,18 @@ rider_A_hmov; locating rider horizontally 2
 rider_A_hmov_0; from rider B
             lda rider_colors,x            ;4  15
             sta COLUP1                    ;3  18
+            bne rider_A_hmov_rock
+            lda #<ROCK_0_GRAPHICS
+            sta tmp_addr_1
+            lda #<ROCK_0_CTRL
+            sta tmp_addr_0
+            jmp rider_A_hmov_rock_end
+rider_A_hmov_rock
             lda rider_graphics
             sta tmp_addr_1
             lda rider_ctrl
             sta tmp_addr_0
+rider_A_hmov_rock_end
             lda #$0                       ;2  20
             ldy #RIDER_HEIGHT - 1         ;2  22
             dec player_vdelay             ;5  27
@@ -861,7 +861,7 @@ rider_A_end_a
             lda CXPPMM              ;2  12 / 48 (from b)    
             sta rider_hit,X         ;4  16 / 52
             dex                     ;2  18 / 54
-            bpl rider_A_start       ;2  20 / 56
+            bpl rider_A_prestart    ;2  20 / 56
             jmp riders_end          ;3  23 / 59
 
 rider_A_to_B_loop
@@ -932,12 +932,12 @@ rider_B_start_l
             tay                     ;2  48
 rider_B_resp_l; strobe resp
             dey                     ;2  50
-            bpl rider_B_resp_l      ;2  62 (52 + 2 * 5)
+            bpl rider_B_resp_l      ;2  57 (52 + 1 * 5)
 rider_B_resp_m
-            lda #$0                 ;2  64 49 from branch
-            sta COLUPF              ;3  67
-            sta RESP1               ;3  70
-            jmp rider_B_hmov        ;2  72
+            lda #$0                 ;2  59 49 from branch
+            sta COLUPF              ;3  62
+            sta RESP1               ;3  65
+            jmp rider_B_hmov        ;2  68
 rider_B_to_A_resp_m
             lda tmp                 ;3  40
             sbc #$05                ;2  42 ; should subtract 6 but expect borrow clear due to plp
@@ -945,16 +945,14 @@ rider_B_to_A_resp_m
             bmi rider_B_to_A_resp_n ;2  46
 rider_B_to_A_resp_l; strobe resp
             dey                     ;2  48 ; note borrow?
-            bpl rider_B_to_A_resp_l ;2  60 (50 + 2 * 5)
-            SLEEP 2                 ;2  62 timing shim
+            bpl rider_B_to_A_resp_l ;2  55 (50 + 1 * 5)
+            SLEEP 2                 ;2  57 timing shim
 rider_B_to_A_resp_n
-            lda #$0                 ;2  64 49 from branch
-            sta COLUPF              ;3  67 
-            sta RESP1               ;3  70
-            sta ENABL               ;3  73
-            sta WSYNC               ;3   0 
-            sta HMOVE               ;3   3 
-            jmp rider_A_hmov_0      ;3   6 
+            lda #$0                 ;2  59 49 from branch
+            sta COLUPF              ;3  62 
+            sta RESP1               ;3  65
+            sta ENABL               ;3  68
+            jmp rider_A_hmov        ;3  71 
 
 rider_B_to_A_hmov
             sty COLUPF              ;3  72 ;
@@ -1001,26 +999,34 @@ rider_B_hmov; locating rider horizontally
             sta WSYNC               ;3   0 
             sta HMOVE               ;3   3 ; process hmoves
 rider_B_hmov_a
-            pla                     ;4   7 / 18 (from a)
-            sta GRP0                ;3  10
+            pla                     ;4   7 / 16 (from a)
+            sta GRP0                ;3  10 
             lda player_charge       ;3  13
             sta COLUPF              ;3  16
             pla                     ;4  20
             sta NUSIZ0              ;3  23
             sta HMP0                ;3  26
-            lda rider_colors,x      ;4  38
-            sta COLUP1              ;3  41
-            lda rider_graphics
-            sta tmp_addr_1
-            lda rider_ctrl
-            sta tmp_addr_0
-            lda #$00                ;4  45
-            sta HMP1                ;3  48
-            ldy #RIDER_HEIGHT - 1   ;2  50
-            sta CXCLR               ;3  53 prep for collision
-            sta COLUPF              ;3  56
-            plp                     ;5  61  exit
-            bpl rider_B_to_A_loop   ;2  63 / 74 (from a)
+            lda rider_colors,x      ;4  30
+            sta COLUP1              ;3  33
+            bne rider_B_hmov_rock   ;2  35
+            ldy #<ROCK_0_GRAPHICS   ;2  37
+            sty tmp_addr_1          ;3  40
+            ldy #<ROCK_0_CTRL       ;2  42
+            sty tmp_addr_0          ;3  45
+            jmp rider_B_hmov_rock_end ;3 48
+rider_B_hmov_rock
+            lda rider_graphics      ;3  39 / 48
+            sta tmp_addr_1          ;3  41
+            lda rider_ctrl          ;3  44
+            sta tmp_addr_0          ;3  47
+            lda #$00                ;2  49
+rider_B_hmov_rock_end
+            sta HMP1                ;3  52 / 61
+            ldy #RIDER_HEIGHT - 1   ;2  54
+            sta CXCLR               ;3  57 prep for collision
+            sta COLUPF              ;3  60
+            plp                     ;5  65  exit
+            bpl rider_B_to_A_loop   ;2  67 / 76 (from a)
 
 rider_B_loop  
             sta WSYNC               ;3   0
@@ -1073,7 +1079,9 @@ rider_B_prestart_jmp
 rider_B_to_A_loop
             lda #$0
             sta ENABL
-            jmp rider_A_loop
+            sta WSYNC               ;3   0
+            sta HMOVE               ;3   3 ; process hmoves
+            jmp rider_A_loop_body   ;3   6
 
 rider_B_to_A_loop_a; running out of cycles in this transition
             lda #$0                ;3  63
@@ -1162,8 +1170,8 @@ ROCK_0_CTRL
 ROCK_0_GRAPHICS
     byte $0,$fc,$f8,$f8,$ff,$7e,$fc,$fe,$fe,$7e,$fc,$fe,$f8,$fc,$f8,$ff,$ff,$fe,$ff,$7e,$fe,$fc,$f8,$c0; 24
 
-RIDER_COLORS ; 5 bytes
-        byte BROWN, RED, WHITE, YELLOW, GREEN
+RIDER_COLORS ; 9 bytes
+        byte BLACK, BROWN, RED, WHITE, YELLOW, RED, WHITE, YELLOW, GREEN
 
 HORIZON_COLOR ; 14 bytes
         byte CLOUD_ORANGE - 2, CLOUD_ORANGE, CLOUD_ORANGE + 2, CLOUD_ORANGE + 4, 250, 252, 254, 252, 250, WHITE_WATER, SKY_BLUE + 8, SKY_BLUE + 4, SKY_BLUE + 2, SKY_BLUE 
