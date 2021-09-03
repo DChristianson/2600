@@ -730,10 +730,50 @@ gameContinue
             jmp newFrame
 
 ;-----------------------------------------------------------------------------------
-; Rider A Pattern
-; rider only, waiting for player
-; rider timings
-; RESPx DELAY CHART
+; Rider Kernels
+; Riders are drawn using the following strategy
+;
+;   prestart - at end of previous kernel, check if the rider is on left or right edge
+;              (will trigger short versus long strobe kernels) 
+;   start    - 1 scanline to strobe resp1 and set hmov1
+;   hmov     - 1 scanline to do horizontal HMOV and set up graphics
+;   loop     - RIDER_HEIGHT scanlines of graphics
+;   
+;   the additional complication is the player resulting in at least two variants of each kernel
+;   
+;   rider A pattern - we are drawing only the rider
+;                     every A kernel decrements player_vdelay looking for a transition to B
+;   rider B pattern - we draw the player and the rider
+;                     player position is strobed before we start drawing riders
+;                     player graphics are pushed onto the stack during vblank
+;                     every B kernel pulls those graphics off the stack
+;                           1 byte of player 0 graphics 
+;                           1 byte containing player 0 HMOV0 and NUSIZ0 data 
+;                           1 byte of processor status to signal whether to move back to A 
+;
+;   A to B transitions - enable ball graphics (used for the spear)
+;   B to A transitions - disable ball graphics
+;
+;   each kernel therefore has multiple versions...
+;         A vs B pattern
+;         the strobe kernels have additional short and long versions
+;         transition kernels for crossing between A and B versions
+;         a few transitions are very tight...
+;           ... and have to splice into the middle of kernels 
+;           ... which is super fun
+;         
+;   labels are used to try and keep the spaghetti from getting out of control:
+;        kernels: rider_(A|B)_(kernel)...
+;        transitions are named by their target: rider_(A_to_B)_(kernel)...
+;
+; possible improvements:
+;  - could save a third of stack space by not pushing processor status and instead tracking
+;    stack pointer ... tradeoff is we would have to manage x register, currently used hold rider #
+;  - use of the x register to hold rider # seems wasteful (we basically never touch it in 
+;    any kernel)
+;
+; rider strobe timings (for reference)
+; RESPx STROBE CHART
 ; A Y0 SC 22 PP  12
 ; A Y1 SC 27 PP  27
 ; A Y2 SC 32 PP  42
@@ -744,6 +784,10 @@ gameContinue
 ; A Y7 SC 57 PP 117
 ; A Y8 SC 62 PP 132
 ; A Y9 SC 67 PP 147
+
+;-----------------------------------------------------------------------------------
+; Rider A Pattern
+; rider only, waiting for player
 
 rider_A_start_l
             sta WSYNC                ;3   0 
