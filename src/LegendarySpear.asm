@@ -26,7 +26,8 @@ RIDER_ANIMATE_SPEED = 3
 PLAYER_ANIMATE_SPEED = 3
 PLAYER_STRIKE_COUNT = 48
 RIDER_RESP_START = $b8
-RIDER_GREEN_TYPE = $48
+RIDER_GREEN_TYPE = $08
+RIDER_ROCK_TYPE = $10
 RAIL_HEIGHT = 6
 LOGO_HEIGHT = 6
 WINNING_SCORE = $99
@@ -116,13 +117,11 @@ init_rider_loop
             dex
             bpl init_rider_loop
 
-            ldx #RIDER_ANIMATE_SPEED
-
             ldx #$28
             stx player_vpos
             stx rider_pattern
 
-            ; clear stack
+            ; clear stack?
             ; BUGBUG broken
             ; ldx #$ff
             ; txs
@@ -134,7 +133,6 @@ newFrame
             lda #0
             sta VBLANK
             sta COLUBK              ; background colour to black
-            sta COLUPF
 
     ; 3 scanlines of vertical sync signal to follow
 
@@ -172,20 +170,23 @@ scoringLoop
             sta WSYNC
             lda rider_type,x
             cmp #RIDER_GREEN_TYPE
-            beq scoringLoop_end         
+            beq scoringLoop_end  
+            and #$0f
+            tay                   ; store if it's a rock
             lda rider_damaged,x
             bpl scoringLoop_decay
             lda rider_hit,x
             and #$80
             beq scoringLoop_end
-            lda #$0
-            sta rider_hit,x
             ; hit scored
+            cpy #$00
+            beq scoringLoop_player_hit
             lda player_fire
             beq scoringLoop_player_hit
 scoringLoop_rider_hit
             sed
             lda player_score
+            clc
             adc #$01
             sta player_score
             cld
@@ -193,22 +194,19 @@ scoringLoop_rider_hit
             sta rider_damaged,x
             jmp scoringLoop_end
 scoringLoop_player_hit
-            ;asl player_health BUGBUG infinite life
+            asl player_health
             lda #$10
             sta player_damaged
             lda #$0
             sta player_charge
 scoringLoop_decay
-            sbc #$01
+            dec rider_damaged,x
             bmi scoringLoop_rider_clear
-            sta rider_damaged,x
             inc rider_type,x
             jmp scoringLoop_end
 scoringLoop_rider_clear
             lda #RIDER_GREEN_TYPE
             sta rider_type,x
-            lda #$ff
-            sta rider_damaged,x
 scoringLoop_end
             dex
             bpl scoringLoop
@@ -303,7 +301,7 @@ movePlayer_game_check
             sta player_score
             ldx #$ff
             stx player_health
-            lda #$27
+            lda #$37
             sta game_state
             jmp movePlayer_end
 
@@ -430,19 +428,26 @@ moveRider_dec_hdelay
 moveRider_reset
             ; reset rider
             lda #RIDER_RESP_START  ;2  56
+            sta rider_damaged,x
             sta rider_hpos,x       ;4  60
             lda rider_pattern      ;3  69 ; Galois LFSA
             lsr                    ;2  71 ; see https://samiam.org/blog/20130617.html
             bcc moveRider_skipEor  ;2  73
             eor #$8e               ;2  75
-moveRider_skipEor
+moveRider_skipEor 
             sta rider_pattern      ;3  78 
-            ; lsr                       ;2  67
-            ; bcc moveRider_chooseColor ;2  69
-            ; lda #RIDER_GREEN_TYPE     ;2  71
-            ; jmp moveRider_skipCycle   ;3  74
+            tay
+            bcc moveRider_chooseColor ;2  69
+            lda #RIDER_GREEN_TYPE     ;2  71
+            jmp moveRider_skipCycle   ;3  74
+            lsr                       ;2  67
+            bcc moveRider_chooseColor ;2  69
+            lda #RIDER_ROCK_TYPE      ;2  71
+            jmp moveRider_skipCycle   ;3  74
 moveRider_chooseColor
+            tya
             and game_state         ;3   81
+
 moveRider_skipCycle
             sta rider_type,x       ;4   85
             jmp moveRider_end      ;3   88
@@ -503,13 +508,8 @@ horizonScore_resp
             lda #>FONT_0
             sta tmp_addr_1 + 1
             lda player_score
+            and #$f0
             lsr
-            lsr
-            lsr
-            lsr
-            asl
-            asl
-            asl
             adc #<FONT_0
             sta tmp_addr_0
             lda #>FONT_0
@@ -721,6 +721,10 @@ gameCheck
             lda player_score
             cmp #WINNING_SCORE
             beq gameEnd
+            and #$30
+            eor game_state
+            sta game_state
+gameCheckHealth
             lda player_health
             bne gameContinue
 gameEnd
