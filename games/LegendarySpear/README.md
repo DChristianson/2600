@@ -6,5 +6,5 @@ You control a lone Samurai riding against wave after wave of enemy cavalry.
 
 This is a simple game study inspired by classics like Stampede, Megamania and Joust. 
 
-<img src="./images/ls.png" data-canonical-src="./images/ls.png" width="400" />
+<img src="./images/ls.png" data-canonical-src="./images/ls.png" width="512" />
 
